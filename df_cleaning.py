@@ -3,19 +3,8 @@ import datetime as dt
 import numpy as np
 import os
 import pandas as pd
-import pickle
-import yfinance as yf
-from openbb import obb
 from matplotlib import pyplot as plt
-import seaborn
-import matplotlib.colors
-from sklearn.preprocessing import MinMaxScaler
-from keras.models import Sequential
-from keras.layers import Dense, LSTM, Dropout
-from keras.callbacks import History
-from zlib import crc32
-import re
-import scipy.stats as ss
+from twelvedata import TDClient
 
 from memory_handling import PickleHelper
 
@@ -28,7 +17,7 @@ class DataFrameHelper:
         self.dataframe = []
         self.tickers = []
 
-    #NOTE: FUNZIONE LOAD MODIFICATA, non ritorna piu nulla ma aggiorna direttamente self.dataframe e self.tickers
+    #FIXME: change it to twelve data
     def load(self):
         """
         Load a DataFrame of stock dataframe from a pickle file if it exists, otherwise create a new DataFrame.
@@ -47,7 +36,6 @@ class DataFrameHelper:
 
         if os.path.isfile(file_path):
             self.dataframe = PickleHelper.pickle_load(self.filename).obj
-            self.dataframe.info() #FIXME: testing
             self.tickers = self.dataframe.columns.tolist()
         else:
             self.tickers = self.get_stockex_tickers()

@@ -1,24 +1,12 @@
 # Libraries used
-import datetime as dt
 import numpy as np
-import os
 import pandas as pd
-import pickle
-import yfinance as yf
-from openbb import obb
-from matplotlib import pyplot as plt
-import seaborn
-import matplotlib.colors
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Dropout
 from keras.callbacks import History
 from zlib import crc32
 import re
-
-import scipy.stats as ss
-
-history = History()  # Ignore, it helps with model_data function
 
 def hashing_and_splitting(adj_close_stocks_dataframe):
     """
