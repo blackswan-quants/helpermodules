@@ -1,4 +1,4 @@
-# helpermodules
+# Helper Modules
 A repository with the modules containing helper modules for specific tasks within our projects. 
 As for the required libraries, they're all listed in `requirements.txt`
 Here's an overview of what you'll find in each module: 
