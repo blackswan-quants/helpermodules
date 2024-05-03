@@ -1,6 +1,6 @@
 # Helper Modules
 A repository with the modules containing helper modules for specific tasks within our projects. 
-As for the required libraries, they're all listed in `requirements.txt`
+As for the required libraries, they're all listed in `requirements.txt`. This repository is made to be used as a submodule, read more on how to use them (here)[https://www.git-tower.com/learn/git/ebook/en/command-line/advanced-topics/submodules/].
 Here's an overview of what you'll find in each module: 
 
 ## Correlation Study Module
