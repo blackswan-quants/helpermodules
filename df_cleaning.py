@@ -8,7 +8,7 @@ from twelvedata import TDClient
 from dotenv import load_dotenv
 
 
-from memory_handling import PickleHelper
+from helpermodules.memory_handling import PickleHelper
 
 class DataFrameHelper:
     def __init__(self, filename, link, years, interval):
