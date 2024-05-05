@@ -122,6 +122,6 @@ class DataFrameHelper:
                 if count_nan > (len(self.dataframe) * percentage):
                     self.dataframe.drop(ticker, axis=1, inplace=True)
 
-        self.dataframe.ffill(axis=1, inplace=True) 
+        self.dataframe.fillna(method='ffill', inplace=True)
         #FIXME: fml this doesn't work if i have consecutive days
         PickleHelper(obj=self.dataframe).pickle_dump(filename='cleaned_nasdaq_dataframe')
