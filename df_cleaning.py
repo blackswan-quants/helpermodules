@@ -6,7 +6,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from twelvedata import TDClient
 
-from memory_handling import PickleHelper
+from helpermodules.memory_handling import PickleHelper
 
 class DataFrameHelper:
     def __init__(self, filename, link, years, interval):

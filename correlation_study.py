@@ -8,7 +8,7 @@ import seaborn
 import matplotlib.colors
 import scipy.stats as ss
 
-from memory_handling import PickleHelper
+from helpermodules.memory_handling import PickleHelper
 
 class CorrelationAnalysis:
     """
