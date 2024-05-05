@@ -8,6 +8,8 @@ from keras.callbacks import History
 from zlib import crc32
 import re
 
+from helpermodules.memory_handling import PickleHelper
+
 def hashing_and_splitting(adj_close_stocks_dataframe):
     """
     Splits the given DataFrame of adjusted close dataframe into training and testing sets based on checksum hashing.
