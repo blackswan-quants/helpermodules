@@ -19,7 +19,6 @@ class DataFrameHelper:
         self.dataframe = []
         self.tickers = []
 
-    #FIXME: change it to twelve data
     def load(self):
         """
         Load a DataFrame of stock dataframe from a pickle file if it exists, otherwise create a new DataFrame.
@@ -83,8 +82,8 @@ class DataFrameHelper:
 
         stocks_dict = {}
         time_window = 365 * self.years
-        start_date = dt.date.today() - dt.timedelta(time_window)
-        end_date = dt.date.today()
+        start_date = (dt.date.today() - dt.timedelta(time_window)).strftime("%Y-%m-%d")
+        end_date = dt.date.today().strftime("%Y-%m-%d")
         for i, ticker in enumerate(self.tickers):
             print('Getting {} ({}/{})'.format(ticker, i, len(self.tickers)))
             dataframe = td.time_series(
