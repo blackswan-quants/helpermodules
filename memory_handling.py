@@ -1,5 +1,6 @@
 # Libraries used
 import pickle
+import re
 
 class PickleHelper:
     def __init__(self, obj):

@@ -1,13 +1,10 @@
 # Libraries used
 import datetime as dt
-import numpy as np
 import os
 import pandas as pd
-from matplotlib import pyplot as plt
 from twelvedata import TDClient
 from dotenv import load_dotenv
-
-
+import re
 from helpermodules.memory_handling import PickleHelper
 
 class DataFrameHelper:
@@ -40,8 +37,6 @@ class DataFrameHelper:
         else:
             self.tickers = self.get_stockex_tickers()
             self.dataframe = self.loaded_df()
-            self.dataframe.info()
-
         return None
 
     def get_stockex_tickers(self):
@@ -86,7 +81,7 @@ class DataFrameHelper:
         end_date = dt.date.today().strftime("%Y-%m-%d")
         for i, ticker in enumerate(self.tickers):
             print('Getting {} ({}/{})'.format(ticker, i, len(self.tickers)))
-            #FIXME: add dataframe concatenation algorithm
+            #FIXME: add dataframe concatenation algorithm or simply pass the list of tickers, dict will be discarted
             dataframe = td.time_series(
                 symbol=ticker,
                 interval=self.interval,
