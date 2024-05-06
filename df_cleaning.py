@@ -86,13 +86,14 @@ class DataFrameHelper:
         end_date = dt.date.today().strftime("%Y-%m-%d")
         for i, ticker in enumerate(self.tickers):
             print('Getting {} ({}/{})'.format(ticker, i, len(self.tickers)))
+            #FIXME: add dataframe concatenation algorithm
             dataframe = td.time_series(
                 symbol=ticker,
                 interval=self.interval,
                 outputsize=5000,
                 timezone="America/New_York",
-                start_date=start_date +' 09:30:00',
-                end_date=end_date +' 15:59:00',
+                #start_date=start_date +' 09:30:00',
+                #end_date=end_date +' 15:59:00',
             ).as_pandas()
             stocks_dict[ticker] = dataframe['close']
 
