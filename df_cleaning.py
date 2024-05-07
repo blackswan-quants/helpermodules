@@ -1,9 +1,7 @@
-# Libraries used
+
 import datetime as dt
-import numpy as np
 import os
 import pandas as pd
-from matplotlib import pyplot as plt
 from twelvedata import TDClient
 import re
 from helpermodules.memory_handling import PickleHelper
@@ -64,7 +62,9 @@ class DataFrameHelper:
         else:
             self.tickers = self.get_stockex_tickers()
             self.dataframe = self.loaded_df()
-            return self.dataframe
+
+        return None
+
 
     def get_stockex_tickers(self):
         """
@@ -85,6 +85,7 @@ class DataFrameHelper:
         Returns:
             pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
         """
+        
         if self.years is not None and self.months is None:
             time_window_months = self.years * 12
         elif self.months is not None and self.years is None:
@@ -139,3 +140,31 @@ class DataFrameHelper:
         # Make API calls for each batch with rate limiting
         stocks_df = API_limit(ticker_batches)
         return stocks_df
+
+    def clean_df(self, percentage):
+        """
+        Cleans the DataFrame by dropping stocks with NaN values exceeding the given percentage threshold.
+        The cleaned DataFrame is pickled after the operation.
+
+        Parameters:
+        self
+        percentage : float
+            Percentage threshold for NaN values. If greater than 1, it's interpreted as a percentage (e.g., 5 for 5%).
+        
+        Returns:
+        None
+        """
+        if percentage > 1:
+            percentage = percentage / 100
+
+        for ticker in self.tickers:
+            nan_values = self.dataframe[ticker].isnull().values.any()
+            if nan_values:
+                count_nan = self.dataframe[ticker].isnull().sum()
+                if count_nan > (len(self.dataframe) * percentage):
+                    self.dataframe.drop(ticker, axis=1, inplace=True)
+
+        self.dataframe.fillna(method='ffill', inplace=True)
+        #FIXME: fml this doesn't work if i have consecutive days
+        PickleHelper(obj=self.dataframe).pickle_dump(filename='cleaned_nasdaq_dataframe')
+
