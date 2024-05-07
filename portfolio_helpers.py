@@ -310,19 +310,26 @@ class Portfolio:
         plt.xticks(date,  rotation=45)
         plt.show()
 
-    def MDD(self):
-        '''
-            This function, named MDD (Maximum Drawdown), calculates the maximum 
-            drawdown of a portfolio based on the portfolio prices provided as input.
-            
-            Parameters:
-                - portfolio_prices: Dictionary
-                    A dictionary containing the portfolio value with corresponding dates as indices.
-            
-            Return:
-                - float
-                    Maximum Drawdown (%)
-        '''
-        value=list(self.df.values())
-        return ((max(value)-min(value))/max(value))*100
+    def MDD(portfolio_prices):
+    '''
+        This function, named MDD (Maximum Drawdown), calculates the maximum 
+        drawdown of a portfolio based on the portfolio prices provided as input.
+        
+        Parameters:
+            - portfolio_prices: Dictionary
+                A dictionary containing the portfolio value with corresponding dates as indices.
+        
+        Return:
+            - float
+                Maximum Drawdown (%)
+    '''
+    value=list(portfolio_prices.values())
+    mdd=0
+    ma=-1
+    for x in value:
+        ma=max(ma, x)
+        if mdd < ma-x:
+            mdd=ma-x
+            mdd_ma=ma
+    return (mdd/mdd_ma)*100
         
