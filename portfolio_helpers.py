@@ -14,6 +14,8 @@ from urllib.request import urlopen
 from datetime import datetime
 import math
 
+# TODO (GIULIO): aggiungi funzione portfolio performance usando e verificando che funzioni la sfunzione monhtly portfolio return
+
 def createURL(url, name):
     ''' 
     Given a url and name of an index it creates the correspondant url
@@ -32,7 +34,6 @@ def createURL(url, name):
         url += word + "%20"
     return url[:-3] + ".csv"
 
-# port
 def get_index_prices(name, ticker):
     '''
     Given an index name and the ticker of an ETF that tracks it, the function
@@ -87,24 +88,71 @@ def get_first_date_year(all_date):
             current_year+=1
     return date
 
+def portfolio_value(stocks_prices, portfolio_weight):
+    '''
+        This function, named portfolio_value, calculates the portfolio value 
+        for each date present in the stocks_prices dataframe, using the stock 
+        prices and portfolio weights provided as input.
+        
+        Parameters:
+            - stocks_prices: pandas.DataFrame
+                It's a dataframe that contains the opening prices of stocks, 
+                with tickers as columns and dates as rows.
+            -portfolio_weight: float array
+                Array containing the weights of the various stocks.
+        Return:
+            - portfolio_prices : Dictionary
+                A dictionary containing the portfolio value with corresponding dates as indices.
 
+    '''
+    portfolio_prices={}
+    for index,row in stocks_prices.iterrows():
+        row=list(row)
+        price=0
+        for i in range(len(row)):
+            price+=row[i]*portfolio_weight[i]
+            portfolio_prices[str(index.strftime('%Y-%m-%d'))]=price
+    return portfolio_prices
+    
+                
 class Portfolio:
-    def __init__(self, assets, weights, df, tickers):
+    '''
+    The Portfolio class helps managing lists of different assets. 
+
+    To initialize it you have to input the following attributes:
+    - assets: list of Asset class
+    - weights: list of floats, where the 1st float corresponds to the weight of 1st asset and so on
+    
+    The following attributes are computed automatically using the assets and weights list
+    - tickers: list of tickes, one for each Asset 
+    - index_names: list of etfs corresponding underlying index names (String)
+    - df: pandas dataframe
+    '''
+
+    def __init__(self, assets, weights):
         self.assets = assets
         self.weights = weights
-        self.df = df
-        self.tickers = tickers
+        self.tickers = self.load_tickers()
+        self.index_names = self.load_index_names()
+        self.df = self.load_df()
 
+    def load_tickers(self):
+        tickers = []
+
+        for asset in self.assets:
+            tickers.append(asset.ticker)
+        
+        return tickers
+        
+    def load_index_names(self):
+        index_names = []
+
+        for asset in self.assets:
+            index_names.append(asset.index_name)
+       
+        return index_names
     
-    def update_tickers(self):
-        ###
-        return 
-    
-    def update_index_names(self):
-        ###
-        return
-    
-    def create_df(self):
+    def load_df(self):
         '''
         Given the portfolio_tickers and index_names lists the function gets the correspondant index name of each ETF.
         Then, it joins the older index data to the newer ETF data month by month (in % change), so that we have more historical data
@@ -117,12 +165,13 @@ class Portfolio:
         Returns:
         - portfolio_prices [Dataframe]
         '''
-        portfolio_tickers = self.update_tickers()
-        index_names = self.update_index_names()
+        portfolio_tickers = self.tickers
+        index_names = self.index_names
 
         portfolio_tickers.append("IBM")
         portfolio_prices = yf.download(portfolio_tickers, interval='1mo')['Open']
         portfolio_prices = portfolio_prices.pct_change()
+        self.tickers.remove("IBM")
 
         for i in (i for i in range(0,len(index_names)-1) if index_names[i] != ""):
             ticker = portfolio_tickers[i]
@@ -138,7 +187,7 @@ class Portfolio:
         portfolio_prices.drop("IBM", axis=1, inplace = True)
         portfolio_prices.dropna(axis = 0, how = 'all', inplace = True)
 
-        self.df = portfolio_prices
+        return portfolio_prices
     
     def annual_portfolio_return(self):
         '''
@@ -161,8 +210,6 @@ class Portfolio:
                 DataFrame containing the annual returns (%) of the portfolio with 
                 the year as the index and the returns as the only column.
         '''
-
-
         
         all_date=(list(self.df.index))
         date = get_first_date_year(all_date)
@@ -204,7 +251,7 @@ class Portfolio:
             month_yield.loc[str(date[i])[:7]]=mean_yield*100
         return month_yield
 
-    def portfolio_return_pac(self, starting_capital, amount, fee, fee_in_percentage):
+    def portfolio_return_pac(self, starting_capital, amount, fee, fee_is_in_percentage):
         '''
         The portfolio_return_pac function outputs a Dataframe with the monthly value of a portfolio built using a PAC (Piano di Accumulo di Capitale) strategy.
         The user can input a starting_capital (initial amount of money in the portfolio), the amount of money that he/she invests each month and a broker's fee.
@@ -230,7 +277,7 @@ class Portfolio:
 
         for i in range(len(date)):
             # for each month, add the amount variable to the capital and subtract the fee 
-            if fee_in_percentage:
+            if fee_is_in_percentage:
                 capital += amount - amount*fee/100
             else:
                 capital += amount - fee
@@ -242,7 +289,6 @@ class Portfolio:
             capital_df.loc[str(date[i])[:7]] = capital
 
         return capital_df
-
 
     def graph_plot(self):
         '''
