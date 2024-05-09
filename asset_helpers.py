@@ -1,11 +1,7 @@
 # Libraries used
-#FIXME: are all of these being used? 
-import datetime as dt
-import numpy as np
-import pandas as pd
-import yfinance as yf #FIXME: why is yfinance being used?
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from twelvedata import TDClient 
 
 #TODO: added docstrings + error handling + fixed some spaghetti code + generalized a function
 class Asset:
@@ -28,13 +24,13 @@ class Asset:
       based on its ISIN (International Securities Identification Number).
     """
     
-    def __init__(self, type, ticker, full_name, df, index_name, ter):
+    def __init__(self, type, ticker, full_name):
         self.type = type
         self.ticker = ticker
-        self.df = df
+        self.df = None
         self.full_name = full_name
-        self.index_name = index_name
-        self.ter = ter
+        self.index_name = None
+        self.ter = None
         self.isin = None
 
     def _extract_value_from_html(self, data, start_pattern, end_pattern):
@@ -121,5 +117,41 @@ class Asset:
         self.index_name = self._extract_value_from_html(html, "replica l'indice", '.')
 
         browser.quit()
+        
+    def load_df(self):
+        #FIXME: load variables
+        
+        # twelve data tickers don't include the name of the exchange (eg: VUAA.MI would simply be VUAA)
+        if "." in self.ticker:
+            ticker = self.ticker[0:self.ticker.rfind(".")]
+        else:
+            ticker = self.ticker
+
+        df = td.time_series(
+            symbol=ticker,
+            interval="1month",
+            #start_date="2019-01-01",
+            #end_date="2020-02-02",
+            timezone="America/New_York"
+        )
+
+        # Returns pandas.DataFrame
+        self.df = df.as_pandas()
+
+    def load(self):
+        if self.type == 'ETF':
+            self.load_etf_isin()
+            self.load_index_name()
+            self.load_ter()
+        self.load_df()
+    
+    def info(self):
+        print("Full name: ", self.full_name)
+        print("Ticker: ", self.ticker)
+        print("Type: ", self.type)
+        print("Ter: ", self.ter, "%")
+        print("Index name: ", self.index_name)
+        print("Isin: ", self.isin)
+        print("Dataframe: \n", self.df)
 
     

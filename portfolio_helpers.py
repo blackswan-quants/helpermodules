@@ -64,27 +64,27 @@ def get_index_prices(name, ticker):
 
     # converting the response data to a pandas Dataframe
     return_data = pd.read_csv(response, sep=",", names=["Date", ticker], skiprows=1)
-
+    #FIXME: why yfinance ;-; 
     # yahoo finance date format is "2024-04-01", whereas the index data we have has a "2024-04" format
     return_data["Date"] += "-01"
 
     return return_data
 
-def get_first_date_year(all_date):
-    '''
+def get_first_date_year(all_dates):
+    ''' #FIXME: change docstring
     This function, named get_first_date_year, takes as input a list of 
     dates called all_date. The function returns a list of strings 
     representing the first dates of each year present in the all_date list.
     
     Parameters:
-        - all_date: Time_stamp array
+        - all_dates: Time_stamp array
             List of dates
     '''
-    current_year = int(str(all_date[0])[:4])
+    current_year = int(str(all_dates[0])[:4])
     date=[]
-    for i in range(0, len(all_date)):
-        if current_year == int(str(all_date[i])[:4]):
-            date.append(str(all_date[i])[:10])
+    for i in range(0, len(all_dates)):
+        if current_year == int(str(all_dates[i])[:4]):
+            date.append(str(all_dates[i])[:10])
             current_year+=1
     return date
 
@@ -121,11 +121,11 @@ class Portfolio:
         portfolio_tickers = self.update_tickers()
         index_names = self.update_index_names()
 
-        portfolio_tickers.append("IBM")
-        portfolio_prices = yf.download(portfolio_tickers, interval='1mo')['Open']
-        portfolio_prices = portfolio_prices.pct_change()
+        portfolio_tickers.append("IBM") #FIXME: ?
+        portfolio_prices = yf.download(portfolio_tickers, interval='1mo')['Open'] #FIXME: yfinance 
+        portfolio_prices = portfolio_prices.pct_change() #FIXME: does this work?
 
-        for i in (i for i in range(0,len(index_names)-1) if index_names[i] != ""):
+        for i in (i for i in range(0,len(index_names)-1) if index_names[i] != ""): #FIXME: for i in i in i >> for i in range(len(index_names) - 1):
             ticker = portfolio_tickers[i]
             return_data = get_index_prices(index_names[i], ticker)
             return_data[ticker] = return_data[ticker].pct_change()
@@ -134,7 +134,7 @@ class Portfolio:
                 return_data.loc[i,"Date"] = datetime.strptime(return_data.loc[i,"Date"], '%Y-%m-%d')
 
             return_data.set_index("Date", inplace = True)
-            portfolio_prices[ticker].fillna(return_data[ticker], inplace = True)
+            portfolio_prices[ticker].fillna(return_data[ticker], inplace = True) #FIXME: why fillna
         
         portfolio_prices.drop("IBM", axis=1, inplace = True)
         portfolio_prices.dropna(axis = 0, how = 'all', inplace = True)
@@ -165,8 +165,8 @@ class Portfolio:
 
 
         
-        all_date=(list(self.df.index))
-        date = get_first_date_year(all_date)
+        all_dates=(list(self.df.index))
+        date = get_first_date_year(all_dates)
         
         portfolio_year = pd.DataFrame(columns=self.tickers)
         for i in range(0, len(date)):
@@ -195,7 +195,7 @@ class Portfolio:
         '''
 
         date=list(self.df.index)
-        stocks_yield = self.df.pct_change().dropna(how='any')
+        stocks_yield = self.df.pct_change().dropna(how='any') 
         month_yield=pd.DataFrame(columns=['Yield'])
 
         for i in range(len(stocks_yield.index)):
@@ -242,7 +242,7 @@ class Portfolio:
             # then, update the capital_df dataframe by filling the corresponding month with the new capital value
             capital_df.loc[str(date[i])[:7]] = capital
 
-        return capital_df
+        return capital_df 
 
 
     def graph_plot(self):
@@ -256,9 +256,9 @@ class Portfolio:
                     A dictionary containing the portfolio value with corresponding dates as indices.
         '''
 
-        all_date=list(self.df.keys())
-        date=get_first_date_year(all_date)
-        date.append(str(all_date[len(all_date)-1])[:10])
+        all_dates=list(self.df.keys())
+        date=get_first_date_year(all_dates)
+        date.append(str(all_dates[len(all_dates)-1])[:10])
 
         plt.style.use("ggplot")
         plt.plot(list(self.df.keys()), list(self.df.values()))
