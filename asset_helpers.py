@@ -2,6 +2,8 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from twelvedata import TDClient 
+from dotenv import load_dotenv 
+import os
 
 #TODO: added docstrings + error handling + fixed some spaghetti code + generalized a function
 class Asset:
@@ -119,8 +121,9 @@ class Asset:
         browser.quit()
         
     def load_df(self):
-        #FIXME: load variables
-        
+        load_dotenv()
+        API_KEY = os.getenv('API_KEY')
+        td = TDClient(apikey=API_KEY)
         # twelve data tickers don't include the name of the exchange (eg: VUAA.MI would simply be VUAA)
         if "." in self.ticker:
             ticker = self.ticker[0:self.ticker.rfind(".")]
