@@ -15,7 +15,6 @@ from datetime import datetime
 import math
 
 # NOTE: la funzione portfolio_performance è un caso particolare di portfolio_return_pac, ricordandosi di mettere i parametri amount e fee uguali a zero.
-#       altrimenti si può usare la funzione portfolio_value.
 
 def createURL(url, name):
     ''' 
