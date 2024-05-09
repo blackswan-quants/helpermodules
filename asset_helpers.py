@@ -143,9 +143,9 @@ class Asset:
 
     def load(self):
         if self.type == 'ETF':
-            self.load_etf_isin()
-            self.load_index_name()
-            self.load_ter()
+            self.update_from_html('isin')
+            self.update_from_html('ter')
+            self.update_index_name()
         self.load_df()
     
     def info(self):
