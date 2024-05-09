@@ -6,9 +6,9 @@ import yfinance as yf
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from twelvedata import TDClient
-
+from dotenv import load_dotenv
+import os
 # Initialize client - apikey parameter is required
-td = TDClient(apikey="insert api key here")
 
 
 class Asset:
@@ -122,6 +122,9 @@ class Asset:
         self.ter = ter
     
     def load_df(self):
+        load_dotenv()
+        API_KEY = os.getenv('API_KEY')
+        td = TDClient(apikey=API_KEY)
         # twelve data tickers don't include the name of the exchange (eg: VUAA.MI would simply be VUAA)
         if "." in self.ticker:
             ticker = self.ticker[0:self.ticker.rfind(".")]

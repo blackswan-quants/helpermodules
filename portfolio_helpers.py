@@ -225,7 +225,7 @@ class Portfolio:
             month_yield.loc[str(date[i])[:7]] = change
         return month_yield
 
-    def portfolio_return_pac(self, starting_capital, amount, fee, fee_is_in_percentage):
+    def portfolio_return_pac(self, starting_capital, amount, fee, fee_is_in_percentage, startdate, enddate):
         '''
         The portfolio_return_pac function outputs a Dataframe with the monthly value of a portfolio built using a PAC (Piano di Accumulo di Capitale) strategy.
         The user can input a starting_capital (initial amount of money in the portfolio), the amount of money that he/she invests each month and a broker's fee.
@@ -245,6 +245,7 @@ class Portfolio:
         month_yield = self.monthly_portfolio_return()
         capital = starting_capital
         capital_df = pd.DataFrame(columns=['Capital'])
+        month_yield= month_yield.loc[startdate:enddate]
         date=list(month_yield.index)
 
         for i in range(len(date)):
