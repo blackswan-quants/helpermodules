@@ -1,10 +1,11 @@
 # Libraries used
+#FIXME: are all of these used? if not, **delete them**
 import datetime as dt
 import numpy as np
 import os
 import pandas as pd
 import pickle
-import yfinance as yf
+import yfinance as yf #FIXME: why is yfinance being used? 
 from matplotlib import pyplot as plt
 import matplotlib.colors
 import re
@@ -13,8 +14,6 @@ from selenium.webdriver.chrome.options import Options
 from urllib.request import urlopen
 from datetime import datetime
 import math
-
-# NOTE: la funzione portfolio_performance è un caso particolare di portfolio_return_pac, ricordandosi di mettere i parametri amount e fee uguali a zero.
 
 def createURL(url, name):
     ''' 
@@ -34,6 +33,7 @@ def createURL(url, name):
         url += word + "%20"
     return url[:-3] + ".csv"
 
+# port
 def get_index_prices(name, ticker):
     '''
     Given an index name and the ticker of an ETF that tracks it, the function
@@ -64,68 +64,48 @@ def get_index_prices(name, ticker):
 
     # converting the response data to a pandas Dataframe
     return_data = pd.read_csv(response, sep=",", names=["Date", ticker], skiprows=1)
-
+    #FIXME: why yfinance ;-; 
     # yahoo finance date format is "2024-04-01", whereas the index data we have has a "2024-04" format
     return_data["Date"] += "-01"
 
     return return_data
 
-def get_first_date_year(all_date):
-    '''
+def get_first_date_year(all_dates):
+    ''' #FIXME: change docstring
     This function, named get_first_date_year, takes as input a list of 
     dates called all_date. The function returns a list of strings 
     representing the first dates of each year present in the all_date list.
     
     Parameters:
-        - all_date: Time_stamp array
+        - all_dates: Time_stamp array
             List of dates
     '''
-    current_year = int(str(all_date[0])[:4])
+    current_year = int(str(all_dates[0])[:4])
     date=[]
-    for i in range(0, len(all_date)):
-        if current_year == int(str(all_date[i])[:4]):
-            date.append(str(all_date[i])[:10])
+    for i in range(0, len(all_dates)):
+        if current_year == int(str(all_dates[i])[:4]):
+            date.append(str(all_dates[i])[:10])
             current_year+=1
     return date
-                
+
+
 class Portfolio:
-    '''
-    The Portfolio class helps managing lists of different assets. 
-
-    To initialize it you have to input the following attributes:
-    - assets: list of Asset class
-    - weights: list of floats, where the 1st float corresponds to the weight of 1st asset and so on
-    
-    The following attributes are computed automatically using the assets and weights list
-    - tickers: list of tickes, one for each Asset 
-    - index_names: list of etfs corresponding underlying index names (String)
-    - df: pandas dataframe
-    '''
-
-    def __init__(self, assets, weights):
+    def __init__(self, assets, weights, df, tickers):
         self.assets = assets
         self.weights = weights
-        self.tickers = self.load_tickers()
-        self.index_names = self.load_index_names()
-        self.df = self.load_df()
+        self.df = df
+        self.tickers = tickers
 
-    def load_tickers(self):
-        tickers = []
-
-        for asset in self.assets:
-            tickers.append(asset.ticker)
-        
-        return tickers
-        
-    def load_index_names(self):
-        index_names = []
-
-        for asset in self.assets:
-            index_names.append(asset.index_name)
-       
-        return index_names
     
-    def load_df(self):
+    def update_tickers(self):
+        ###
+        return 
+    
+    def update_index_names(self):
+        ###
+        return
+    
+    def create_df(self):
         '''
         Given the portfolio_tickers and index_names lists the function gets the correspondant index name of each ETF.
         Then, it joins the older index data to the newer ETF data month by month (in % change), so that we have more historical data
@@ -136,17 +116,16 @@ class Portfolio:
         - index_names [List of Strings]
 
         Returns:
-        - portfolio_prices [Dataframe], dataframe with % change of each portfolio component month by month
+        - portfolio_prices [Dataframe]
         '''
-        portfolio_tickers = self.tickers
-        index_names = self.index_names
+        portfolio_tickers = self.update_tickers()
+        index_names = self.update_index_names()
 
-        portfolio_tickers.append("IBM")
-        portfolio_prices = yf.download(portfolio_tickers, interval='1mo')['Open']
-        portfolio_prices = portfolio_prices.pct_change()
-        self.tickers.remove("IBM")
+        portfolio_tickers.append("IBM") #FIXME: ?
+        portfolio_prices = yf.download(portfolio_tickers, interval='1mo')['Open'] #FIXME: yfinance 
+        portfolio_prices = portfolio_prices.pct_change() #FIXME: does this work?
 
-        for i in (i for i in range(0,len(index_names)-1) if index_names[i] != ""):
+        for i in (i for i in range(0,len(index_names)-1) if index_names[i] != ""): #FIXME: for i in i in i >> for i in range(len(index_names) - 1):
             ticker = portfolio_tickers[i]
             return_data = get_index_prices(index_names[i], ticker)
             return_data[ticker] = return_data[ticker].pct_change()
@@ -155,12 +134,12 @@ class Portfolio:
                 return_data.loc[i,"Date"] = datetime.strptime(return_data.loc[i,"Date"], '%Y-%m-%d')
 
             return_data.set_index("Date", inplace = True)
-            portfolio_prices[ticker].fillna(return_data[ticker], inplace = True)
+            portfolio_prices[ticker].fillna(return_data[ticker], inplace = True) #FIXME: why fillna
         
         portfolio_prices.drop("IBM", axis=1, inplace = True)
         portfolio_prices.dropna(axis = 0, how = 'all', inplace = True)
 
-        return portfolio_prices
+        self.df = portfolio_prices
     
     def annual_portfolio_return(self):
         '''
@@ -183,9 +162,11 @@ class Portfolio:
                 DataFrame containing the annual returns (%) of the portfolio with 
                 the year as the index and the returns as the only column.
         '''
+
+
         
-        all_date=(list(self.df.index))
-        date = get_first_date_year(all_date)
+        all_dates=(list(self.df.index))
+        date = get_first_date_year(all_dates)
         
         portfolio_year = pd.DataFrame(columns=self.tickers)
         for i in range(0, len(date)):
@@ -213,30 +194,31 @@ class Portfolio:
             - month_yield [Dataframe]
         '''
 
-        
-        stocks_yield = self.df.dropna(how='any')
-        date=list(stocks_yield.index)
-        month_yield = pd.DataFrame(columns=['Yield'])
+        date=list(self.df.index)
+        stocks_yield = self.df.pct_change().dropna(how='any') 
+        month_yield=pd.DataFrame(columns=['Yield'])
 
         for i in range(len(stocks_yield.index)):
-            change = 0
+            mean_yield=0
             for j in range(len(self.tickers)):
-                change += stocks_yield.iloc[i][self.tickers[j]]*self.weights[j]
-            month_yield.loc[str(date[i])[:7]] = change
+                mean_yield+=stocks_yield.iloc[i][self.tickers[j]]*self.weights[j]
+            month_yield.loc[str(date[i])[:7]]=mean_yield*100
         return month_yield
 
-    def portfolio_return_pac(self, starting_capital, amount, fee, fee_is_in_percentage, startdate, enddate):
+    def portfolio_return_pac(self, starting_capital, amount, fee, fee_in_percentage):
         '''
         The portfolio_return_pac function outputs a Dataframe with the monthly value of a portfolio built using a PAC (Piano di Accumulo di Capitale) strategy.
         The user can input a starting_capital (initial amount of money in the portfolio), the amount of money that he/she invests each month and a broker's fee.
         If the fee is a fixed amount for each new contribution the percentage parameter should be set as False. If the fee is based on a percentage of the
         contribution the percentage parameter should be set as True.
         Parameters:
-            - self [Portfolio object]
+            - portfolio_prices [Dataframe], containing the monthly(!) value of all assets
+            - portfolio_tickers [list of Strings]
+            - portfolio_weight [list of floats]
             - starting_capital [int]
             - amount [int]
             - fee [int]
-            - fee_is_in_percentage [boolean]
+            - percentage [boolean]
         Returns:
             - capital_df [Dataframe]
         '''
@@ -245,12 +227,11 @@ class Portfolio:
         month_yield = self.monthly_portfolio_return()
         capital = starting_capital
         capital_df = pd.DataFrame(columns=['Capital'])
-        month_yield= month_yield.loc[startdate:enddate]
         date=list(month_yield.index)
 
         for i in range(len(date)):
             # for each month, add the amount variable to the capital and subtract the fee 
-            if fee_is_in_percentage:
+            if fee_in_percentage:
                 capital += amount - amount*fee/100
             else:
                 capital += amount - fee
@@ -261,7 +242,8 @@ class Portfolio:
             # then, update the capital_df dataframe by filling the corresponding month with the new capital value
             capital_df.loc[str(date[i])[:7]] = capital
 
-        return capital_df
+        return capital_df 
+
 
     def graph_plot(self):
         '''
@@ -274,16 +256,16 @@ class Portfolio:
                     A dictionary containing the portfolio value with corresponding dates as indices.
         '''
 
-        all_date=list(self.df.keys())
-        date=get_first_date_year(all_date)
-        date.append(str(all_date[len(all_date)-1])[:10])
+        all_dates=list(self.df.keys())
+        date=get_first_date_year(all_dates)
+        date.append(str(all_dates[len(all_dates)-1])[:10])
 
         plt.style.use("ggplot")
         plt.plot(list(self.df.keys()), list(self.df.values()))
         plt.xticks(date,  rotation=45)
         plt.show()
 
-    def MDD(portfolio_prices):
+    def MDD(self):
         '''
             This function, named MDD (Maximum Drawdown), calculates the maximum 
             drawdown of a portfolio based on the portfolio prices provided as input.
@@ -296,13 +278,6 @@ class Portfolio:
                 - float
                     Maximum Drawdown (%)
         '''
-        value=list(portfolio_prices.values())
-        mdd=0
-        ma=-1
-        for x in value:
-            ma=max(ma, x)
-            if mdd < ma-x:
-                mdd=ma-x
-                mdd_ma=ma
-        return (mdd/mdd_ma)*100
-            
+        value=list(self.df.values())
+        return ((max(value)-min(value))/max(value))*100
+        
