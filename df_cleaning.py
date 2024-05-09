@@ -56,6 +56,41 @@ class DataFrameHelper:
         tickers = df['Ticker'].values.tolist()
         return tickers
 
+        def get_stock_data(start_date, output_size, ticker, interval):
+            
+            load_dotenv()
+            API_KEY = os.getenv('API_KEY')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+            td = TDClient(apikey = API_KEY)
+
+            data_to_load_tmp = output_size
+            tmp_data = start_date
+            parts = []
+
+            for i in range(1, (output_size // 5000)+1):
+                if (data_to_load_tmp >= 5000):
+                    ts = td.time_series(
+                        symbol=ticker,
+                        interval=interval,
+                        outputsize=5000,
+                        end_date = tmp_data,
+                        timezone="America/New_York",
+                    ).as_pandas()
+                    data_to_load_tmp -= 5000
+                    parts.append(ts)
+                    tmp_data = parts[i-1].index.tolist()[-1] - dt.timedelta(minutes=1)
+                if (data_to_load_tmp < 5000):
+                    ts = td.time_series(
+                        symbol=ticker,
+                        interval=interval,
+                        outputsize=data_to_load_tmp,
+                        end_date = tmp_data,
+                        timezone="America/New_York",
+                    ).as_pandas()
+                    parts.append(ts)
+
+            return pd.concat(parts)
+
+
     def loaded_df(self):
         """
         Downloads stock price data for the specified number of years and tickers using yfinance.
