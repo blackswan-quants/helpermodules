@@ -8,10 +8,10 @@ import re
 from helpermodules.memory_handling import PickleHelper
 
 class DataFrameHelper:
-    def __init__(self, filename, link, years, interval):
+    def __init__(self, filename, link, months, interval):
         self.filename = filename
         self.link = link
-        self.years = years
+        self.months = months
         self.interval = interval
         self.dataframe = []
         self.tickers = []
@@ -56,39 +56,39 @@ class DataFrameHelper:
         tickers = df['Ticker'].values.tolist()
         return tickers
 
-        def get_stock_data(start_date, output_size, ticker, interval):
-            
-            load_dotenv()
-            API_KEY = os.getenv('API_KEY')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
-            td = TDClient(apikey = API_KEY)
+    def get_stock_data(start_date, output_size, ticker, interval):
+        
+        load_dotenv()
+        API_KEY = os.getenv('API_KEY')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+        td = TDClient(apikey = API_KEY)
 
-            data_to_load_tmp = output_size
-            tmp_data = start_date
-            parts = []
+        data_to_load_tmp = output_size
+        tmp_data = start_date
+        parts = []
 
-            for i in range(1, (output_size // 5000)+1):
-                if (data_to_load_tmp >= 5000):
-                    ts = td.time_series(
-                        symbol=ticker,
-                        interval=interval,
-                        outputsize=5000,
-                        end_date = tmp_data,
-                        timezone="America/New_York",
-                    ).as_pandas()
-                    data_to_load_tmp -= 5000
-                    parts.append(ts)
-                    tmp_data = parts[i-1].index.tolist()[-1] - dt.timedelta(minutes=1)
-                if (data_to_load_tmp < 5000):
-                    ts = td.time_series(
-                        symbol=ticker,
-                        interval=interval,
-                        outputsize=data_to_load_tmp,
-                        end_date = tmp_data,
-                        timezone="America/New_York",
-                    ).as_pandas()
-                    parts.append(ts)
+        for i in range(1, (output_size // 5000)+1):
+            if (data_to_load_tmp >= 5000):
+                ts = td.time_series(
+                    symbol=ticker,
+                    interval=interval,
+                    outputsize=5000,
+                    end_date = tmp_data,
+                    timezone="America/New_York",
+                ).as_pandas()
+                data_to_load_tmp -= 5000
+                parts.append(ts)
+                tmp_data = parts[i-1].index.tolist()[-1] - dt.timedelta(minutes=1)
+            if (data_to_load_tmp < 5000):
+                ts = td.time_series(
+                    symbol=ticker,
+                    interval=interval,
+                    outputsize=data_to_load_tmp,
+                    end_date = tmp_data,
+                    timezone="America/New_York",
+                ).as_pandas()
+                parts.append(ts)
 
-            return pd.concat(parts)
+        return pd.concat(parts)
 
 
     def loaded_df(self):
@@ -111,23 +111,16 @@ class DataFrameHelper:
         td = TDClient(apikey = API_KEY)
 
         stocks_dict = {}
-        time_window = 365 * self.years
-        start_date = (dt.date.today() - dt.timedelta(time_window)).strftime("%Y-%m-%d")
-        end_date = dt.date.today().strftime("%Y-%m-%d")
+        time_window = 21 * self.months
+        start_date = dt.datetime.now().replace(hour=16, minute=0 , second=0 ,microsecond=0) + dt.timedelta(days = -2)
         for i, ticker in enumerate(self.tickers):
             print('Getting {} ({}/{})'.format(ticker, i, len(self.tickers)))
             #FIXME: add dataframe concatenation algorithm or simply pass the list of tickers, dict will be discarted
-            dataframe = td.time_series(
-                symbol=ticker,
-                interval=self.interval,
-                outputsize=5000,
-                timezone="America/New_York",
-                #start_date=start_date +' 09:30:00',
-                #end_date=end_date +' 15:59:00',
-            ).as_pandas()
+            dataframe = self.get_stock_data(start_date, time_window * 390, ticker, self.interval)
             stocks_dict[ticker] = dataframe['close']
 
         stocks_dataframe = pd.DataFrame.from_dict(stocks_dict)
+
         return stocks_dataframe
 
     def clean_df(self, percentage):
