@@ -1,13 +1,33 @@
 # Libraries used
+#FIXME: are all of these being used? 
 import datetime as dt
 import numpy as np
 import pandas as pd
-import yfinance as yf
+import yfinance as yf #FIXME: why is yfinance being used?
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-
+#TODO: added docstrings + error handling + fixed some spaghetti code + generalized a function
 class Asset:
+    """
+    Represents an asset, such as an ETF (Exchange-Traded Fund), with associated data and functionality.
+
+    Attributes:
+    - type (str): The type of the asset (e.g., 'ETF', 'Stock', 'Bond').
+    - ticker (str): The ticker symbol or identifier of the asset.
+    - full_name (str): The full name or description of the asset.
+    - df (pandas.DataFrame): The DataFrame containing historical data of the asset.
+    - index_name (str): The name of the index that the asset tracks (if applicable).
+    - ter (float): The Total Expense Ratio (TER) of the asset.
+
+    Methods:
+    - apply_ter(ter): Apply a specified TER to adjust the asset's historical data.
+    - update_from_html(extraction_type): Update asset attributes (e.g., ISIN, TER) by extracting
+      information from HTML data based on the specified extraction type ('isin' or 'ter').
+    - update_index_name(): Update the index name of the asset by extracting information from a webpage
+      based on its ISIN (International Securities Identification Number).
+    """
+    
     def __init__(self, type, ticker, full_name, df, index_name, ter):
         self.type = type
         self.ticker = ticker
@@ -15,87 +35,91 @@ class Asset:
         self.full_name = full_name
         self.index_name = index_name
         self.ter = ter
+        self.isin = None
 
-    def apply_ter(self, ter):
-        montly_ter_pct = (ter/12)/100
+    def _extract_value_from_html(self, data, start_pattern, end_pattern):
+        """
+        Extracts a value from HTML data based on start and end patterns.
 
-        columns = self.df[self.ticker]
-        
-        new_df = columns.apply(lambda x: x - montly_ter_pct)
+        Parameters:
+        - data (str): HTML data to search within.
+        - start_pattern (str): Pattern indicating the start of the value.
+        - end_pattern (str): Pattern indicating the end of the value.
 
-        self.df[self.ticker] = new_df
-
-    def update_etf_isin(self):
+        Returns:
+        - str: Extracted value between start and end patterns, or None if not found.
+        """
         with open('./very_long_html.txt', 'r') as file:
             data = file.read()
-
-        # NOTA: spesso non trova l'etf a causa di parentesi o altre piccole differenze con justEtf, creare una funzione di ricerca
-        #       con gerarchica basata su parole chiave (World, S&P 500, ...) piuttosto che cercare con .find()
-        index = data.find(self.full_name.upper(),0)
-
-        # se non trova nulla ritorna None
-        if index == -1:
+        start_index = data.upper().find(self.full_name.upper(), 0)
+        if start_index == -1:
             return None
 
-        i=0
-        isin=""
-        # getting the etf isin by reading from the fourth " symbol up to the fifth " symbol it encounters on the very_long_html file
-        while (i<5):
-            index+=1
-            letter=data[index]
-            if letter == '"':
-                i+=1
-            if (i>=4) & (letter!='"'):
-                isin+=letter
+        value = ""
+        index = start_index + len(start_pattern)
+        while index < len(data):
+            if data[index] == end_pattern:
+                break
+            value += data[index]
+            index += 1
 
-        self.isin = isin
+        return value
     
+    def apply_ter(self, ter):
+        """
+        Applies a specified Total Expense Ratio (TER) adjustment to the historical data of the asset.
+
+        Parameters:
+        - ter (float): The Total Expense Ratio (TER) to apply.
+        
+        """
+        if self.ticker not in self.df.columns:
+            raise ValueError(f"Ticker '{self.ticker}' not found in DataFrame columns.")
+
+        monthly_ter_pct = (ter / 12) / 100
+        columns = self.df[self.ticker]
+        new_df = columns.apply(lambda x: x - monthly_ter_pct)
+        self.df[self.ticker] = new_df
+
+    def update_from_html(self, extraction_type):
+        """
+        Updates ETF attributes (e.g., ISIN, TER) by extracting information from HTML data.
+
+        Parameters:
+        - extraction_type (str): Type of extraction ('isin' or 'ter').
+
+        Returns:
+        - str: Extracted value, or None if extraction is unsuccessful.
+        """
+        if extraction_type not in ['isin', 'ter']:
+            raise ValueError("extraction_type must be either 'isin' or 'ter'.")
+
+        with open('./very_long_html.txt', 'r') as file:
+            data = file.read().replace('\n', '')
+
+        if extraction_type == 'isin':
+            value = self._extract_value_from_html(data, self.full_name, '"')
+            self.isin = value
+        elif extraction_type == 'ter':
+            if self.isin is None:
+                raise ValueError("ISIN is required to extract TER.")
+            value = self._extract_value_from_html(data, self.isin, '"%')
+            self.ter = value
+
+
     def update_index_name(self):
-        if self.isin == None:
-            return 
+        if self.isin is None:
+            raise ValueError("ISIN is required to update index name.")
 
-        url="https://www.justetf.com/it/etf-profile.html?isin=" + self.isin
-
-        # not showing browser GUI (makes code much faster)
+        url = f"https://www.justetf.com/it/etf-profile.html?isin={self.isin}"
         options = Options()
         options.add_argument("--headless")
         browser = webdriver.Chrome(options=options)
-
         browser.get(url)
 
-        # get html of justetf page and look for index name
-        html=browser.page_source
-        index = html.find("replica l'indice",0) + 16
+        html = browser.page_source
+        self.index_name = self._extract_value_from_html(html, "replica l'indice", '.')
 
-        index_name=""
-        letter=''
-        # the index name is found before the first . symbol in the text
-        while letter!='.':
-            index+=1
-            letter=html[index]
-            if (letter!='.'):
-                index_name+=letter
+        browser.quit()
 
-        self.index_name = index_name
-    
-    def update_ter(self):
-        if self.isin == None:
-            return 
-
-        with open('./very_long_html.txt', 'r') as file:
-            data = file.read() # replace'\n', ''
-
-        index = data.find(self.isin,0)
-
-        i=0
-        ter=""
-        while (i<5):
-            index+=1
-            letter=data[index]
-            if letter == '"':
-                i+=1
-            if (i>=4) & (letter!='"') & (letter!='%'):
-                ter+=letter
-
-        self.ter = ter
     
