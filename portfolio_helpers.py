@@ -1,10 +1,11 @@
 # Libraries used
+#FIXME: are all of these used? if not, **delete them**
 import datetime as dt
 import numpy as np
 import os
 import pandas as pd
 import pickle
-import yfinance as yf
+import yfinance as yf #FIXME: why is yfinance being used? 
 from matplotlib import pyplot as plt
 import matplotlib.colors
 import re
