@@ -62,7 +62,7 @@ def apply_inflation_on_portfolio(portflio_df, selected_country):
                 amount = portflio_df['Amount'][date]
                 pct_change = portflio_df['Pct Change'][date]
 
-                portflio_df['Amount'][date] = amount - amount*montly_inflation
-                portflio_df['Pct Change'][date] = pct_change - montly_inflation
+                portfolio_with_inflation['Amount'][date] = amount - amount*montly_inflation
+                portfolio_with_inflation['Pct Change'][date] = pct_change - montly_inflation
     
-    return portflio_df
+    return portfolio_with_inflation
