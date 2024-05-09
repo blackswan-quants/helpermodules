@@ -88,33 +88,6 @@ def get_first_date_year(all_date):
             date.append(str(all_date[i])[:10])
             current_year+=1
     return date
-
-def portfolio_value(stocks_prices, portfolio_weight):
-    '''
-        This function, named portfolio_value, calculates the portfolio value 
-        for each date present in the stocks_prices dataframe, using the stock 
-        prices and portfolio weights provided as input.
-        
-        Parameters:
-            - stocks_prices: pandas.DataFrame
-                It's a dataframe that contains the opening prices of stocks, 
-                with tickers as columns and dates as rows.
-            -portfolio_weight: float array
-                Array containing the weights of the various stocks.
-        Return:
-            - portfolio_prices : Dictionary
-                A dictionary containing the portfolio value with corresponding dates as indices.
-
-    '''
-    portfolio_prices={}
-    for index,row in stocks_prices.iterrows():
-        row=list(row)
-        price=0
-        for i in range(len(row)):
-            price+=row[i]*portfolio_weight[i]
-            portfolio_prices[str(index.strftime('%Y-%m-%d'))]=price
-    return portfolio_prices
-    
                 
 class Portfolio:
     '''
