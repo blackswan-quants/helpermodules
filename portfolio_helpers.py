@@ -14,7 +14,8 @@ from urllib.request import urlopen
 from datetime import datetime
 import math
 
-# TODO (GIULIO): aggiungi funzione portfolio performance usando e verificando che funzioni la sfunzione monhtly portfolio return
+# NOTE: la funzione portfolio_performance è un caso particolare di portfolio_return_pac, ricordandosi di mettere i parametri amount e fee uguali a zero.
+#       altrimenti si può usare la funzione portfolio_value.
 
 def createURL(url, name):
     ''' 
@@ -163,7 +164,7 @@ class Portfolio:
         - index_names [List of Strings]
 
         Returns:
-        - portfolio_prices [Dataframe]
+        - portfolio_prices [Dataframe], dataframe with % change of each portfolio component month by month
         '''
         portfolio_tickers = self.tickers
         index_names = self.index_names
@@ -240,15 +241,16 @@ class Portfolio:
             - month_yield [Dataframe]
         '''
 
-        date=list(self.df.index)
-        stocks_yield = self.df.pct_change().dropna(how='any')
-        month_yield=pd.DataFrame(columns=['Yield'])
+        
+        stocks_yield = self.df.dropna(how='any')
+        date=list(stocks_yield.index)
+        month_yield = pd.DataFrame(columns=['Yield'])
 
         for i in range(len(stocks_yield.index)):
-            mean_yield=0
+            change = 0
             for j in range(len(self.tickers)):
-                mean_yield+=stocks_yield.iloc[i][self.tickers[j]]*self.weights[j]
-            month_yield.loc[str(date[i])[:7]]=mean_yield*100
+                change += stocks_yield.iloc[i][self.tickers[j]]*self.weights[j]
+            month_yield.loc[str(date[i])[:7]] = change
         return month_yield
 
     def portfolio_return_pac(self, starting_capital, amount, fee, fee_is_in_percentage):
@@ -258,13 +260,11 @@ class Portfolio:
         If the fee is a fixed amount for each new contribution the percentage parameter should be set as False. If the fee is based on a percentage of the
         contribution the percentage parameter should be set as True.
         Parameters:
-            - portfolio_prices [Dataframe], containing the monthly(!) value of all assets
-            - portfolio_tickers [list of Strings]
-            - portfolio_weight [list of floats]
+            - self [Portfolio object]
             - starting_capital [int]
             - amount [int]
             - fee [int]
-            - percentage [boolean]
+            - fee_is_in_percentage [boolean]
         Returns:
             - capital_df [Dataframe]
         '''
@@ -311,25 +311,25 @@ class Portfolio:
         plt.show()
 
     def MDD(portfolio_prices):
-    '''
-        This function, named MDD (Maximum Drawdown), calculates the maximum 
-        drawdown of a portfolio based on the portfolio prices provided as input.
-        
-        Parameters:
-            - portfolio_prices: Dictionary
-                A dictionary containing the portfolio value with corresponding dates as indices.
-        
-        Return:
-            - float
-                Maximum Drawdown (%)
-    '''
-    value=list(portfolio_prices.values())
-    mdd=0
-    ma=-1
-    for x in value:
-        ma=max(ma, x)
-        if mdd < ma-x:
-            mdd=ma-x
-            mdd_ma=ma
-    return (mdd/mdd_ma)*100
-        
+        '''
+            This function, named MDD (Maximum Drawdown), calculates the maximum 
+            drawdown of a portfolio based on the portfolio prices provided as input.
+            
+            Parameters:
+                - portfolio_prices: Dictionary
+                    A dictionary containing the portfolio value with corresponding dates as indices.
+            
+            Return:
+                - float
+                    Maximum Drawdown (%)
+        '''
+        value=list(portfolio_prices.values())
+        mdd=0
+        ma=-1
+        for x in value:
+            ma=max(ma, x)
+            if mdd < ma-x:
+                mdd=ma-x
+                mdd_ma=ma
+        return (mdd/mdd_ma)*100
+            

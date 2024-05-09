@@ -125,6 +125,8 @@ class Asset:
         # twelve data tickers don't include the name of the exchange (eg: VUAA.MI would simply be VUAA)
         if "." in self.ticker:
             ticker = self.ticker[0:self.ticker.rfind(".")]
+        else:
+            ticker = self.ticker
 
         df = td.time_series(
             symbol=ticker,
@@ -138,9 +140,10 @@ class Asset:
         self.df = df.as_pandas()
 
     def load(self):
-        self.load_etf_isin()
-        self.load_index_name()
-        self.load_ter()
+        if self.type == 'ETF':
+            self.load_etf_isin()
+            self.load_index_name()
+            self.load_ter()
         self.load_df()
     
     def info(self):
