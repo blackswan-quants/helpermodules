@@ -56,11 +56,7 @@ class DataFrameHelper:
         tickers = df['Ticker'].values.tolist()
         return tickers
 
-    def get_stock_data(start_date, output_size, ticker, interval):
-        
-        load_dotenv()
-        API_KEY = os.getenv('API_KEY')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
-        td = TDClient(apikey = API_KEY)
+    def concat_data(self, td, start_date, output_size, tickers):
 
         data_to_load_tmp = output_size
         tmp_data = start_date
@@ -69,8 +65,8 @@ class DataFrameHelper:
         for i in range(1, (output_size // 5000)+1):
             if (data_to_load_tmp >= 5000):
                 ts = td.time_series(
-                    symbol=ticker,
-                    interval=interval,
+                    symbol=tickers,
+                    interval=self.frequency,
                     outputsize=5000,
                     end_date = tmp_data,
                     timezone="America/New_York",
@@ -80,48 +76,74 @@ class DataFrameHelper:
                 tmp_data = parts[i-1].index.tolist()[-1] - dt.timedelta(minutes=1)
             if (data_to_load_tmp < 5000):
                 ts = td.time_series(
-                    symbol=ticker,
-                    interval=interval,
+                    symbol=tickers,
+                    interval=self.frequency,
                     outputsize=data_to_load_tmp,
                     end_date = tmp_data,
                     timezone="America/New_York",
                 ).as_pandas()
                 parts.append(ts)
-
+        print(pd.concat(parts))
         return pd.concat(parts)
 
 
     def loaded_df(self):
         """
-        Downloads stock price data for the specified number of years and tickers using yfinance.
-        Returns a pandas DataFrame and pickles the data.
-
-        Parameters:
-            years (int): Number of years of historical data to load.
-            tickers (List[str]): List of ticker symbols.
-            interval (str): Time frequency of historical data to load with format: ('1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1W', '1M' or '1Q').
-
+        Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
         Returns:
-            pandas.DataFrame: DataFrame containing downloaded stock price data.
+            pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
         """
-        load_dotenv()
+        
+        if self.years is not None and self.months is None:
+            time_window_months = self.years * 12
+        elif self.months is not None and self.years is None:
+            time_window_months = self.months
+        else:
+            raise ValueError("Exactly one of 'years' or 'months' should be provided.")
 
-        API_KEY = os.getenv('API_KEY')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+        '''
+        end_date = dt.date.today()
+        start_date = end_date - pd.DateOffset(months=time_window_months)
+        start_date_str = start_date.strftime("%Y-%m-%d")
+        end_date_str = end_date.strftime("%Y-%m-%d")
+        '''
 
-        td = TDClient(apikey = API_KEY)
 
-        stocks_dict = {}
-        time_window = 21 * self.months
         start_date = dt.datetime.now().replace(hour=16, minute=0 , second=0 ,microsecond=0) + dt.timedelta(days = -2)
-        for i, ticker in enumerate(self.tickers):
-            print('Getting {} ({}/{})'.format(ticker, i, len(self.tickers)))
-            #FIXME: add dataframe concatenation algorithm or simply pass the list of tickers, dict will be discarted
-            dataframe = self.get_stock_data(start_date, time_window * 390, ticker, self.interval)
-            stocks_dict[ticker] = dataframe['close']
+        output_size = time_window_months*8190
 
-        stocks_dataframe = pd.DataFrame.from_dict(stocks_dict)
+        def divide_tickers(tickers):
+            return [tickers[i:i+55] for i in range(0, len(tickers),55)]
+        
+        def API_limit(ticker_batches):
+            load_dotenv()
+            API_KEY = os.getenv('API_KEY')
+            td = TDClient(apikey=API_KEY)
 
-        return stocks_dataframe
+            all_dataframes = []
+
+            for i, ticker_list in enumerate(ticker_batches):
+                print(f'Processing batch {i+1}/{len(ticker_batches)}')
+                try:
+                    print(f"{td, start_date, output_size, ticker_list, ticker_batches}")
+                    dataframe = self.concat_data(td, start_date, output_size, ticker_list)
+                    all_dataframes.append(dataframe)
+                    print('Please wait a minute...')  # Insert appropriate message here
+                    time.sleep(60)  # Rate limiting: wait 60 seconds between batches
+                except Exception as e:
+                    print(f"Error fetching data for batch {i+1}: {e}")
+
+            if all_dataframes:
+                # Concatenate all dataframes into a single dataframe
+                stocks_dataframe = pd.concat(all_dataframes, ignore_index=True)
+                return stocks_dataframe
+            else:
+                print('The dataframe is empty.')
+                return None
+
+        ticker_batches = divide_tickers(self.tickers)
+        stocks_df = API_limit(ticker_batches)
+        return stocks_df
 
     def clean_df(self, percentage):
         """
