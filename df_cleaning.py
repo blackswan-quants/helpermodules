@@ -1,5 +1,6 @@
 
-import datetime as dt
+import datetime 
+from datetime import timedelta
 import os
 import pandas as pd
 from twelvedata import TDClient
@@ -15,8 +16,8 @@ class DataFrameHelper:
     Parameters:
         filename (str): Name of the pickle file to save or load DataFrame.
         link (str): URL link to a Wikipedia page containing stock exchange information.
-        interval (str): Time frequency of historical data to load (e.g., '1min', '1day', '1W').
-        frequency (str): Frequency of data intervals ('daily', 'weekly', 'monthly', etc.).
+        interval (str): Time self.frequency of historical data to load (e.g., '1min', '1day', '1W').
+        self.frequency (str): self.frequency of data intervals ('daily', 'weekly', 'monthly', etc.).
         years (int, optional): Number of years of historical data to load (default: None).
         months (int, optional): Number of months of historical data to load (default: None).
 
@@ -78,14 +79,132 @@ class DataFrameHelper:
                 axis=1, inplace=True)
         tickers = df['Ticker'].values.tolist()
         return tickers
+    
+    def fetch_twelve_data(self, start_date, end_date):
+        
+        load_dotenv()
+        API_KEY = os.getenv('API_KEY')
+        td = TDClient(apikey=API_KEY)
 
+        dataframes = []
+        
+        #divide tickers into batches
+        def divide_tickers_inbatches(tickers):
+            return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
+        
+        #calculate how many datapoints based on the frequency and the time window
+        def calculate_data_points(start_date, end_date, frequency):
+            #define market trading hours (from 9:45 to 15:15, considering Simone's hypothesis)
+            market_open_hour = 9
+            market_open_minute = 45
+            market_close_hour = 15
+            market_close_minute = 15
+
+            total_data_points = 0
+            
+            #determine the frequency type ('min' or 'h') and calculate data points accordingly
+            if 'min' in frequency:
+                current_date = start_date
+                while current_date <= end_date:
+                    #check if current_date is a trading day (Monday to Friday)
+                    if current_date.weekday() < 5:  #monday (0) to Friday (4)
+                        #calculate market open and close times for the current trading day
+                        market_open_time = datetime(
+                            current_date.year, current_date.month, current_date.day,
+                            market_open_hour, market_open_minute
+                        )
+                        market_close_time = datetime(
+                            current_date.year, current_date.month, current_date.day,
+                            market_close_hour, market_close_minute
+                        )
+                        trading_duration = (market_close_time - market_open_time).total_seconds() / 60
+                        total_data_points += trading_duration
+                    current_date += timedelta(days=1)  
+
+            elif 'h' in frequency:
+                current_date = start_date
+                while current_date <= end_date:
+                    if current_date.weekday() < 5:
+                        market_open_time = datetime(
+                            current_date.year, current_date.month, current_date.day,
+                            market_open_hour, market_open_minute
+                        )
+                        market_close_time = datetime(
+                            current_date.year, current_date.month, current_date.day,
+                            market_close_hour, market_close_minute
+                        )
+                        trading_duration = (market_close_time - market_open_time).total_seconds() / 3600
+                        total_data_points += trading_duration
+                    current_date += timedelta(days=1)  
+            else:
+                raise ValueError("Unsupported frequency")
+            return total_data_points
+
+        #get date ranges
+        def split_date_range(start_date, end_date, tot_datapoints):
+            start = start_date
+            batch_size_days=5000
+            end = end_date
+
+            total_days = (end - start).days
+            num_batches = (total_days // batch_size_days) + 1
+
+            ranges = []
+            for i in range(num_batches):
+                if i == 0:
+                    part_start = start
+                else:
+                    part_start = part_end + timedelta(days=1)
+                    part_end = part_start + timedelta(days=batch_size_days - 1)
+                if part_end > end:
+                    part_end = end  #ensure end date of last batch does not exceed end_date
+                ranges.append((part_start.strftime("%Y-%m-%d"), part_end.strftime("%Y-%m-%d")))
+
+            return ranges
+        
+        ticker_batches = divide_tickers_inbatches(tickers=self.tickers) 
+        data_points_per_call = 5000  # Maximum data points per API call
+        total_data_points = calculate_data_points(start_date, end_date, self.frequency)
+        date_ranges = split_date_range(start_date, end_date, total_data_points)
+        
+        for i, ticker_list in enumerate(ticker_batches):
+                print(f'Processing batch {i+1}/{len(ticker_batches)}')
+                for ticker in ticker_list:
+                    
+                    ticker_dataframes = []
+
+                    for j, (call_start, call_end) in enumerate(date_ranges):
+                        print(f'Fetching data for {ticker} - Call {j+1}/{len(date_ranges)}')
+                        try:
+                            dataframe = td.time_series(
+                                symbol=ticker,
+                                interval=self.frequency,
+                                start_date=call_start,
+                                end_date=call_end,
+                                outputsize=data_points_per_call,
+                                timezone="America/New_York",
+                            ).as_pandas()
+                            ticker_dataframes.append(dataframe)
+                        except Exception as e:
+                            print(f"Error fetching data for {ticker} - Call {j+1}/{len(date_ranges)}: {e}")
+                    # Concatenate all dataframes for the ticker
+                    if ticker_dataframes:
+                        dataframes.append(pd.concat(ticker_dataframes, ignore_index=True))
+                print('Please wait 60 seconds.')
+                time.sleep(60)
+        # Concatenate all dataframes for all tickers
+        if dataframes:
+            return pd.concat(dataframes, ignore_index=True)
+        else:
+            print('No data retrieved.')
+            return None
+    
     def loaded_df(self):
         """
         Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
         Returns:
             pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
         """
-        
         if self.years is not None and self.months is None:
             time_window_months = self.years * 12
         elif self.months is not None and self.years is None:
@@ -93,52 +212,10 @@ class DataFrameHelper:
         else:
             raise ValueError("Exactly one of 'years' or 'months' should be provided.")
 
-        end_date = dt.date.today()
+        end_date = datetime.date.today()
         start_date = end_date - pd.DateOffset(months=time_window_months)
-        start_date_str = start_date.strftime("%Y-%m-%d")
-        end_date_str = end_date.strftime("%Y-%m-%d")
 
-        # Divide tickers into batches
-        def divide_tickers(tickers):
-            return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
-
-        # Make API calls for each batch with rate limiting
-        def API_limit(ticker_batches):
-            load_dotenv()
-            API_KEY = os.getenv('API_KEY')
-            td = TDClient(apikey=API_KEY)
-
-            all_dataframes = []
-
-            for i, ticker_list in enumerate(ticker_batches):
-                print(f'Processing batch {i+1}/{len(ticker_batches)}')
-                try:
-                    dataframe = td.time_series(
-                        symbol=ticker_list,
-                        interval=self.frequency,
-                        start_date=start_date_str,
-                        end_date=end_date_str,
-                        outputsize=5000,
-                        timezone="America/New_York",
-                    ).as_pandas()
-                    all_dataframes.append(dataframe)
-                    print('Please wait a minute...')  # Insert appropriate message here
-                    time.sleep(60)  # Rate limiting: wait 60 seconds between batches
-                except Exception as e:
-                    print(f"Error fetching data for batch {i+1}: {e}")
-
-            if all_dataframes:
-                # Concatenate all dataframes into a single dataframe
-                stocks_dataframe = pd.concat(all_dataframes, ignore_index=True)
-                return stocks_dataframe
-            else:
-                print('The dataframe is empty.')
-                return None
-
-        # Divide tickers into batches
-        ticker_batches = divide_tickers(self.tickers)
-        # Make API calls for each batch with rate limiting
-        stocks_df = API_limit(ticker_batches)
+        stocks_df = self.fetch_twelve_data(self.tickers, start_date=start_date, end_date=end_date, frequency=self.frequency)
         return stocks_df
 
     def clean_df(self, percentage):
@@ -156,6 +233,7 @@ class DataFrameHelper:
         """
         if percentage > 1:
             percentage = percentage / 100
+
 
         for ticker in self.tickers:
             nan_values = self.dataframe[ticker].isnull().values.any()
