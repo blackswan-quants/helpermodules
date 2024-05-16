@@ -22,7 +22,7 @@ class DataFrameHelper:
         months (int, optional): Number of months of historical data to load (default: None).
 
     Methods:
-        load():
+        getdata():
             Loads a DataFrame of stock price data from a pickle file if it exists, otherwise creates a new DataFrame.
             Returns:
                 pandas.DataFrame or None: DataFrame containing stock price data if loaded successfully, otherwise None.
@@ -46,7 +46,7 @@ class DataFrameHelper:
         self.years = years
         self.months = months
 
-    def load(self):
+    def getdata(self):
         """
         Load a DataFrame of stock price data from a pickle file if it exists, otherwise create a new DataFrame.
         Returns:
@@ -138,16 +138,15 @@ class DataFrameHelper:
                     current_date += timedelta(days=1)  
             else:
                 raise ValueError("Unsupported frequency")
-            return total_data_points
+            return total_data_points #FIXME: all this does is give me the amount of datapoints 
 
         #get date ranges
-        def split_date_range(start_date, end_date, tot_datapoints):
+        def split_date_range(start_date, end_date, tot_datapoints): #FIXME: i have a feeling this function is useless
             start = start_date
-            batch_size_days=5000
+            batch_size=5000
             end = end_date
 
-            total_days = (end - start).days
-            num_batches = (total_days // batch_size_days) + 1
+            num_batches = (tot_datapoints // batch_size) + 1
 
             ranges = []
             for i in range(num_batches):
@@ -155,11 +154,12 @@ class DataFrameHelper:
                     part_start = start
                 else:
                     part_start = part_end + timedelta(days=1)
-                    part_end = part_start + timedelta(days=batch_size_days - 1)
+                    part_end = part_start + timedelta(days=batch_size - 1)
                 if part_end > end:
                     part_end = end  #ensure end date of last batch does not exceed end_date
                 ranges.append((part_start.strftime("%Y-%m-%d"), part_end.strftime("%Y-%m-%d")))
-
+            #TODO: function that deletes repeated days
+        
             return ranges
         
         ticker_batches = divide_tickers_inbatches(tickers=self.tickers) 
@@ -179,7 +179,9 @@ class DataFrameHelper:
                             dataframe = td.time_series(
                                 symbol=ticker,
                                 interval=self.frequency,
-                                start_date=call_start,
+                                start_date=call_start, 
+                                #FIXME: the point is that i need a function that keeps track of the last day and hour of every batch of 5k, 
+                                #so that the next call starts with that timestamp 
                                 end_date=call_end,
                                 outputsize=data_points_per_call,
                                 timezone="America/New_York",
