@@ -139,33 +139,11 @@ class DataFrameHelper:
             else:
                 raise ValueError("Unsupported frequency")
             return total_data_points #FIXME: all this does is give me the amount of datapoints 
-
-        #get date ranges
-        def split_date_range(start_date, end_date, tot_datapoints): #FIXME: i have a feeling this function is useless
-            start = start_date
-            batch_size=5000
-            end = end_date
-
-            num_batches = (tot_datapoints // batch_size) + 1
-
-            ranges = []
-            for i in range(num_batches):
-                if i == 0:
-                    part_start = start
-                else:
-                    part_start = part_end + timedelta(days=1)
-                    part_end = part_start + timedelta(days=batch_size - 1)
-                if part_end > end:
-                    part_end = end  #ensure end date of last batch does not exceed end_date
-                ranges.append((part_start.strftime("%Y-%m-%d"), part_end.strftime("%Y-%m-%d")))
-            #TODO: function that deletes repeated days
-        
-            return ranges
         
         ticker_batches = divide_tickers_inbatches(tickers=self.tickers) 
         data_points_per_call = 5000  # Maximum data points per API call
         total_data_points = calculate_data_points(start_date, end_date, self.frequency)
-        date_ranges = split_date_range(start_date, end_date, total_data_points)
+        date_ranges = split_date_range(start_date, end_date, total_data_points) #TODO: need to redo this function
         
         for i, ticker_list in enumerate(ticker_batches):
                 print(f'Processing batch {i+1}/{len(ticker_batches)}')
