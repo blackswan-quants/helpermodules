@@ -1,6 +1,6 @@
 
-import datetime 
-from datetime import timedelta
+
+from datetime import timedelta, datetime
 import os
 import pandas as pd
 from twelvedata import TDClient
@@ -80,70 +80,37 @@ class DataFrameHelper:
         tickers = df['Ticker'].values.tolist()
         return tickers
     
-    def fetch_twelve_data(self, start_date, end_date):
+    def fetch_twelve_data(self, start_date : datetime, end_date: datetime):
         
         load_dotenv()
         API_KEY = os.getenv('API_KEY')
         td = TDClient(apikey=API_KEY)
 
         dataframes = []
+        generator = Timestamping(start_date=start_date, end_date=end_date)
+        
+        batchsize = 5000
+        boundaries = []
+        try:
+            boundary_start = next(generator)
+            boundary_end = boundary_start 
+            while True: 
+                for _ in range(batchsize -1):
+                    try:
+                        boundary_end = next(generator)
+                    except StopIteration:
+                        boundaries.append((boundary_start, boundary_end))
+                        raise StopIteration
+                boundaries.append((boundary_start, boundary_end))
+                boundary_start = next(generator)   
+        except StopIteration:
+            pass
         
         #divide tickers into batches
         def divide_tickers_inbatches(tickers):
             return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
         
-        #calculate how many datapoints based on the frequency and the time window
-        def calculate_data_points(start_date, end_date, frequency):
-            #define market trading hours (from 9:45 to 15:15, considering Simone's hypothesis)
-            market_open_hour = 9
-            market_open_minute = 45
-            market_close_hour = 15
-            market_close_minute = 15
-
-            total_data_points = 0
-            
-            #determine the frequency type ('min' or 'h') and calculate data points accordingly
-            if 'min' in frequency:
-                current_date = start_date
-                while current_date <= end_date:
-                    #check if current_date is a trading day (Monday to Friday)
-                    if current_date.weekday() < 5:  #monday (0) to Friday (4)
-                        #calculate market open and close times for the current trading day
-                        market_open_time = datetime(
-                            current_date.year, current_date.month, current_date.day,
-                            market_open_hour, market_open_minute
-                        )
-                        market_close_time = datetime(
-                            current_date.year, current_date.month, current_date.day,
-                            market_close_hour, market_close_minute
-                        )
-                        trading_duration = (market_close_time - market_open_time).total_seconds() / 60
-                        total_data_points += trading_duration
-                    current_date += timedelta(days=1)  
-
-            elif 'h' in frequency:
-                current_date = start_date
-                while current_date <= end_date:
-                    if current_date.weekday() < 5:
-                        market_open_time = datetime(
-                            current_date.year, current_date.month, current_date.day,
-                            market_open_hour, market_open_minute
-                        )
-                        market_close_time = datetime(
-                            current_date.year, current_date.month, current_date.day,
-                            market_close_hour, market_close_minute
-                        )
-                        trading_duration = (market_close_time - market_open_time).total_seconds() / 3600
-                        total_data_points += trading_duration
-                    current_date += timedelta(days=1)  
-            else:
-                raise ValueError("Unsupported frequency")
-            return total_data_points #FIXME: all this does is give me the amount of datapoints 
-        
         ticker_batches = divide_tickers_inbatches(tickers=self.tickers) 
-        data_points_per_call = 5000  # Maximum data points per API call
-        total_data_points = calculate_data_points(start_date, end_date, self.frequency)
-        date_ranges = split_date_range(start_date, end_date, total_data_points) #TODO: need to redo this function
         
         for i, ticker_list in enumerate(ticker_batches):
                 print(f'Processing batch {i+1}/{len(ticker_batches)}')
@@ -151,8 +118,8 @@ class DataFrameHelper:
                     
                     ticker_dataframes = []
 
-                    for j, (call_start, call_end) in enumerate(date_ranges):
-                        print(f'Fetching data for {ticker} - Call {j+1}/{len(date_ranges)}')
+                    for j, (call_start, call_end) in enumerate(boundaries):
+                        print(f'Fetching data for {ticker} - Call {j+1}/{len(boundaries)}')
                         try:
                             dataframe = td.time_series(
                                 symbol=ticker,
@@ -161,12 +128,12 @@ class DataFrameHelper:
                                 #FIXME: the point is that i need a function that keeps track of the last day and hour of every batch of 5k, 
                                 #so that the next call starts with that timestamp 
                                 end_date=call_end,
-                                outputsize=data_points_per_call,
+                                outputsize=batchsize,
                                 timezone="America/New_York",
                             ).as_pandas()
                             ticker_dataframes.append(dataframe)
                         except Exception as e:
-                            print(f"Error fetching data for {ticker} - Call {j+1}/{len(date_ranges)}: {e}")
+                            print(f"Error fetching data for {ticker} - Call {j+1}/{len(boundaries)}: {e}")
                     # Concatenate all dataframes for the ticker
                     if ticker_dataframes:
                         dataframes.append(pd.concat(ticker_dataframes, ignore_index=True))
@@ -192,10 +159,10 @@ class DataFrameHelper:
         else:
             raise ValueError("Exactly one of 'years' or 'months' should be provided.")
 
-        end_date = datetime.date.today()
+        end_date = datetime.now()
         start_date = end_date - pd.DateOffset(months=time_window_months)
 
-        stocks_df = self.fetch_twelve_data(self.tickers, start_date=start_date, end_date=end_date, frequency=self.frequency)
+        stocks_df = self.fetch_twelve_data(start_date=start_date, end_date=end_date)
         return stocks_df
 
     def clean_df(self, percentage):
@@ -225,4 +192,41 @@ class DataFrameHelper:
         self.dataframe.fillna(method='ffill', inplace=True)
         #FIXME: fml this doesn't work if i have consecutive days
         PickleHelper(obj=self.dataframe).pickle_dump(filename='cleaned_nasdaq_dataframe')
+
+class Timestamping:
+    def __init__(self, start_date: datetime, end_date: datetime, frequency_minutes=1):
+        #define market trading hours (from 9:45 to 15:15, considering Simone's hypothesis)
+        self.market_open_hour = 9
+        self.market_open_minute = 45
+        self.market_close_hour = 15
+        self.market_close_minute = 15
+        #initial assumption: unless stated, starts at the start of the trading day  
+        self.current = start_date.replace(hour= self.market_open_hour ,minute=self.market_open_minute -1)
+        self.end = end_date
+        self.frequency = frequency_minutes
+
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> datetime:
+        # TODO: Increment current to the next stop:
+        # - Add 1 minute (later we'll add the frequency here)
+        self.current += timedelta(minutes=1)
+        # if it's end of day:
+        #   - Add 1 day
+        if self.current.minute > self.market_close_minute and self.current.hour >= self.market_close_hour:
+            self.current += timedelta(days=1)
+            self.current = self.current.replace(hour=self.market_open_hour, minute=self.market_open_minute)
+        #   if it's end of Friday:
+        #     - make it Monday
+        if self.current.weekday() == 5:
+            self.current += timedelta(days=2)
+        if self.current.weekday() == 6:
+            self.current += timedelta(days=1)
+
+        if self.current > self.end:
+            raise StopIteration
+
+        return self.current
 
