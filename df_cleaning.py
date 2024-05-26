@@ -1,5 +1,5 @@
 
-
+import numpy as np
 from datetime import timedelta, datetime
 import os
 import pandas as pd
@@ -14,7 +14,7 @@ class DataFrameHelper:
     A class for downloading and processing historical stock price data using the Twelve Data API.
 
     Parameters:
-        filename (str): Name of the pickle file to save or load DataFrame.
+        filename (str): Name of the pickle file to save or load df.
         link (str): URL link to a Wikipedia page containing stock exchange information.
         interval (str): Time self.frequency of historical data to load (e.g., '1min', '1day', '1W').
         self.frequency (str): self.frequency of data intervals ('daily', 'weekly', 'monthly', etc.).
@@ -23,9 +23,9 @@ class DataFrameHelper:
 
     Methods:
         getdata():
-            Loads a DataFrame of stock price data from a pickle file if it exists, otherwise creates a new DataFrame.
+            Loads a df of stock price data from a pickle file if it exists, otherwise creates a new df.
             Returns:
-                pandas.DataFrame or None: DataFrame containing stock price data if loaded successfully, otherwise None.
+                pandas.df or None: df containing stock price data if loaded successfully, otherwise None.
 
         get_stockex_tickers():
             Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
@@ -35,12 +35,13 @@ class DataFrameHelper:
         loaded_df():
             Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
             Returns:
-                pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
+                pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
     """
 
     def __init__(self, filename, link, frequency, years=None, months=None):
         self.filename = filename
         self.link = link
+        self.dataframe = pd.DataFrame()
         self.frequency = frequency
         self.tickers = []
         self.years = years
@@ -48,21 +49,21 @@ class DataFrameHelper:
 
     def getdata(self):
         """
-        Load a DataFrame of stock price data from a pickle file if it exists, otherwise create a new DataFrame.
+        Load a df of stock price data from a pickle file if it exists, otherwise create a new df.
         Returns:
-            pandas.DataFrame or None: DataFrame containing stock price data if loaded successfully, otherwise None.
+            pandas.df or None: df containing stock price data if loaded successfully, otherwise None.
         """
         if not re.search("^.*\.pkl$", self.filename):
             self.filename += ".pkl"
         file_path = "./pickle_files/" + self.filename
 
         if os.path.isfile(file_path):
-            self.dataframe = PickleHelper.pickle_load(self.filename).obj
-            self.tickers = self.dataframe.columns.tolist()
-            return self.dataframe
+            self.df = PickleHelper.pickle_load(self.filename).obj
+            self.tickers = self.df.columns.tolist()
+            return self.df
         else:
             self.tickers = self.get_stockex_tickers()
-            self.dataframe = self.loaded_df()
+            self.df = self.loaded_df()
 
         return None
 
@@ -85,10 +86,11 @@ class DataFrameHelper:
         load_dotenv()
         API_KEY = os.getenv('API_KEY')
         td = TDClient(apikey=API_KEY)
-
-        dataframes = []
-        generator = Timestamping(start_date=start_date, end_date=end_date)
+        #initializing the final df, setting columns to be name of tickers
+        dataframes = pd.DataFrame(np.nan, columns = self.tickers, index = [d for d in Timestamping(start_date, end_date)])
         
+        #dividing the 5k batches and keeping track of the
+        generator = Timestamping(start_date=start_date, end_date=end_date)
         batchsize = 5000
         boundaries = []
         try:
@@ -110,47 +112,39 @@ class DataFrameHelper:
         def divide_tickers_inbatches(tickers):
             return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
         
-        ticker_batches = divide_tickers_inbatches(tickers=self.tickers) 
+        ticker_batches = divide_tickers_inbatches(tickers=self.tickers)
         
         for i, ticker_list in enumerate(ticker_batches):
                 print(f'Processing batch {i+1}/{len(ticker_batches)}')
                 for ticker in ticker_list:
-                    
-                    ticker_dataframes = []
-
+                
                     for j, (call_start, call_end) in enumerate(boundaries):
                         print(f'Fetching data for {ticker} - Call {j+1}/{len(boundaries)}')
                         try:
-                            dataframe = td.time_series(
+                            df = td.time_series(
                                 symbol=ticker,
                                 interval=self.frequency,
                                 start_date=call_start, 
-                                #FIXME: the point is that i need a function that keeps track of the last day and hour of every batch of 5k, 
-                                #so that the next call starts with that timestamp 
                                 end_date=call_end,
                                 outputsize=batchsize,
                                 timezone="America/New_York",
                             ).as_pandas()
-                            ticker_dataframes.append(dataframe)
+                            print(len(df))
+                            for index, value in df['close'].items(): 
+                                dataframes.loc[index, ticker] =  value
+                            
                         except Exception as e:
                             print(f"Error fetching data for {ticker} - Call {j+1}/{len(boundaries)}: {e}")
-                    # Concatenate all dataframes for the ticker
-                    if ticker_dataframes:
-                        dataframes.append(pd.concat(ticker_dataframes, ignore_index=True))
-                print('Please wait 60 seconds.')
-                time.sleep(60)
-        # Concatenate all dataframes for all tickers
-        if dataframes:
-            return pd.concat(dataframes, ignore_index=True)
-        else:
-            print('No data retrieved.')
-            return None
+                if len(ticker_batches) == 55: 
+                    print('Please wait 60 seconds.')
+                    time.sleep(60)
+        return dataframes
     
     def loaded_df(self):
         """
         Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
         Returns:
-            pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
+            pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
         """
         if self.years is not None and self.months is None:
             time_window_months = self.years * 12
@@ -159,16 +153,17 @@ class DataFrameHelper:
         else:
             raise ValueError("Exactly one of 'years' or 'months' should be provided.")
 
-        end_date = datetime.now()
+        end_date = datetime.now() - timedelta(days = 30)
         start_date = end_date - pd.DateOffset(months=time_window_months)
 
         stocks_df = self.fetch_twelve_data(start_date=start_date, end_date=end_date)
+        PickleHelper(obj=stocks_df).pickle_dump(filename='nasdaq_dataframe')
         return stocks_df
 
     def clean_df(self, percentage):
         """
-        Cleans the DataFrame by dropping stocks with NaN values exceeding the given percentage threshold.
-        The cleaned DataFrame is pickled after the operation.
+        Cleans the df by dropping stocks with NaN values exceeding the given percentage threshold.
+        The cleaned df is pickled after the operation.
 
         Parameters:
         self
@@ -183,15 +178,15 @@ class DataFrameHelper:
 
 
         for ticker in self.tickers:
-            nan_values = self.dataframe[ticker].isnull().values.any()
+            nan_values = self.df[ticker].isnull().values.any()
             if nan_values:
-                count_nan = self.dataframe[ticker].isnull().sum()
-                if count_nan > (len(self.dataframe) * percentage):
-                    self.dataframe.drop(ticker, axis=1, inplace=True)
+                count_nan = self.df[ticker].isnull().sum()
+                if count_nan > (len(self.df) * percentage):
+                    self.df.drop(ticker, axis=1, inplace=True)
 
-        self.dataframe.fillna(method='ffill', inplace=True)
+        self.df.fillna(method='ffill', inplace=True)
         #FIXME: fml this doesn't work if i have consecutive days
-        PickleHelper(obj=self.dataframe).pickle_dump(filename='cleaned_nasdaq_dataframe')
+        PickleHelper(obj=self.df).pickle_dump(filename='cleaned_nasdaq_dataframe')
 
 class Timestamping:
     def __init__(self, start_date: datetime, end_date: datetime, frequency_minutes=1):
@@ -201,7 +196,7 @@ class Timestamping:
         self.market_close_hour = 15
         self.market_close_minute = 15
         #initial assumption: unless stated, starts at the start of the trading day  
-        self.current = start_date.replace(hour= self.market_open_hour ,minute=self.market_open_minute -1)
+        self.current = start_date.replace(hour= self.market_open_hour ,minute=self.market_open_minute -1, second=0, microsecond=0)
         self.end = end_date
         self.frequency = frequency_minutes
 
