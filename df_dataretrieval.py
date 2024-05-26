@@ -9,7 +9,7 @@ from helpermodules.memory_handling import PickleHelper
 from dotenv import load_dotenv
 import time
 
-class DataFrameHelper:
+class IndexData_Retrieval:
     """
     A class for downloading and processing historical stock price data using the Twelve Data API.
 
@@ -82,7 +82,24 @@ class DataFrameHelper:
         return tickers
     
     def fetch_twelve_data(self, start_date : datetime, end_date: datetime):
-        
+        """
+        Fetches historical data for multiple tickers within a specified date range from the Twelve Data API and stores the results in a DataFrame.
+        This function divides the date range into manageable batches, retrieves the data from the Twelve Data API, and handles rate limits by batching tickers and pausing between batches.
+        The data retrieval follows New York trading hours (9:45 AM to 3:15 PM EST).
+
+        Parameters:
+        -----------
+        start_date : datetime
+            The start date for fetching data.
+        end_date : datetime
+            The end date for fetching data.
+
+        Returns:
+        --------
+        pd.DataFrame
+            A DataFrame containing the historical data for all specified tickers.
+        """
+
         load_dotenv()
         API_KEY = os.getenv('API_KEY')
         td = TDClient(apikey=API_KEY)
@@ -110,6 +127,19 @@ class DataFrameHelper:
         
         #divide tickers into batches
         def divide_tickers_inbatches(tickers):
+            """
+            Divides the tickers list into batches of 55.
+
+            Parameters:
+            -----------
+            tickers : list
+                The list of ticker symbols to be divided.
+
+            Returns:
+            --------
+            list
+                A list of ticker batches, each containing up to 55 tickers.
+            """
             return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
         
         ticker_batches = divide_tickers_inbatches(tickers=self.tickers)
@@ -176,7 +206,7 @@ class DataFrameHelper:
         if percentage > 1:
             percentage = percentage / 100
 
-
+        #FIXME: this is not working, it's giving out an empty df
         for ticker in self.tickers:
             nan_values = self.df[ticker].isnull().values.any()
             if nan_values:
@@ -189,7 +219,42 @@ class DataFrameHelper:
         PickleHelper(obj=self.df).pickle_dump(filename='cleaned_nasdaq_dataframe')
 
 class Timestamping:
+    """
+    A class to generate timestamps at specified minute intervals within market trading hours,
+    iterating from a start date to an end date. 
+
+    The market trading hours are defined as 9:45 AM to 3:15 PM (based on Simone's hypothesis).
+    The generator skips weekends and ensures the timestamps are within trading hours.
+
+    Attributes:
+    -----------
+    start_date : datetime
+        The start date for the timestamp generation.
+    end_date : datetime
+        The end date for the timestamp generation.
+    frequency_minutes : int, optional
+        The frequency in minutes for generating timestamps. Default is 1 minute.
+
+    Methods:
+    --------
+    __iter__():
+        Returns the iterator object itself.
+    __next__() -> datetime:
+        Returns the next timestamp in the sequence.
+    """
     def __init__(self, start_date: datetime, end_date: datetime, frequency_minutes=1):
+        """
+        Initializes the Timestamping class with start date, end date, and frequency in minutes.
+
+        Parameters:
+        -----------
+        start_date : datetime
+            The start date for the timestamp generation.
+        end_date : datetime
+            The end date for the timestamp generation.
+        frequency_minutes : int, optional
+            The frequency in minutes for generating timestamps. Default is 1 minute.
+        """
         #define market trading hours (from 9:45 to 15:15, considering Simone's hypothesis)
         self.market_open_hour = 9
         self.market_open_minute = 45
@@ -205,7 +270,23 @@ class Timestamping:
         return self
 
     def __next__(self) -> datetime:
-        # TODO: Increment current to the next stop:
+        """
+        Returns the next timestamp in the sequence.
+
+        Increments the current timestamp by the specified frequency (in minutes).
+        Adjusts for end-of-day, weekends, and ensures timestamps fall within market trading hours.
+
+        Raises:
+        -------
+        StopIteration:
+            When the current timestamp exceeds the end date.
+        
+        Returns:
+        --------
+        datetime
+            The next timestamp in the sequence.
+        """
+        #Increment current to the next stop:
         # - Add 1 minute (later we'll add the frequency here)
         self.current += timedelta(minutes=1)
         # if it's end of day:
