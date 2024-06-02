@@ -7,6 +7,10 @@ from matplotlib import pyplot as plt
 import seaborn
 import matplotlib.colors
 import scipy.stats as ss
+from scipy import signal
+from datetime import timedelta, datetime
+
+from sklearn.preprocessing import MinMaxScaler
 
 from helpermodules.memory_handling import PickleHelper
 
@@ -24,7 +28,7 @@ class CorrelationAnalysis:
         winner (list): A list containing ticker symbols corresponding to the pair with the maximum correlation coefficient.
     """
 
-    def __init__(self, dataframe, tickers, start_datetime, end_datetime):
+    def __init__(self, dataframe, tickers):
         """
         Initialize the CorrelationAnalysis object.
         
@@ -36,11 +40,11 @@ class CorrelationAnalysis:
         """
         self.dataframe = dataframe
         self.tickers = tickers 
-        self.start_datetime = start_datetime
-        self.end_datetime = end_datetime
-        self.corrvalues = None
-        self.pvalues = None
-        self.winner = None
+#        self.start_datetime = start_datetime
+ #       self.end_datetime = end_datetime
+  #      self.corrvalues = None
+   #     self.pvalues = None
+    #    self.winner = None
 
     def get_correlated_stocks(self):
         """
@@ -107,3 +111,33 @@ class CorrelationAnalysis:
         plt.plot(self.dataframe[max_pair[1]])
         plt.plot(self.dataframe[max_pair[0]])
         plt.show
+
+    def print_cross_corr(self, threshold: float, max_lag: int, volumes=None):
+        for i in range(len(self.dataframe.columns)):
+            for j in range(len(self.dataframe.columns)):
+                if i != j:
+                    corr_list = signal.correlate(self.dataframe[self.tickers[i]], self.dataframe[self.tickers[j]], mode='full')
+                    lags = signal.correlation_lags(len(self.dataframe[self.tickers[i]]), len(self.dataframe[self.tickers[j]]))
+                    corr_list = corr_list / (len(self.dataframe[self.tickers[i]]) * self.dataframe[self.tickers[i]].std() * self.dataframe[self.tickers[j]].std())
+                    
+                    # Normalize correlations to the range [0, 1]
+                    sc = MinMaxScaler(feature_range=(0, 1))
+                    corr_list_scaled = sc.fit_transform(corr_list.reshape(-1, 1)).flatten()
+                    
+                    for k, corr in enumerate(corr_list_scaled):
+                        if abs(lags[k]) <= max_lag and corr >= threshold:
+                            print(f"{self.tickers[i]} and {self.tickers[j]} are correlated ({corr}) with lag = {lags[k]}")
+
+    def print_corr(self, threshold: float, max_lag: int, volume_filter=None):
+        for shift in range(max_lag + 1):
+            shifted_df = self.dataframe.shift(shift)
+            concat_dataframe = pd.concat([self.dataframe, shifted_df.add_suffix(f'_shifted_{shift}')], axis=1)
+            corr_matrix = concat_dataframe.corr('pearson')
+
+            for i in range(len(self.dataframe.columns)):
+                for j in range(len(self.dataframe.columns), len(concat_dataframe.columns)):
+                    if i != j - len(self.dataframe.columns):
+                        if corr_matrix.iloc[i, j] >= threshold:
+                            print(f"{concat_dataframe.columns[i]} and {concat_dataframe.columns[j]} are correlated ({corr_matrix.iloc[i, j]}, shift = {shift})")
+
+            print('\n')

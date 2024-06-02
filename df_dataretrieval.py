@@ -41,7 +41,7 @@ class IndexData_Retrieval:
     def __init__(self, filename, link, frequency, years=None, months=None):
         self.filename = filename
         self.link = link
-        self.dataframe = pd.DataFrame()
+        self.df = pd.DataFrame()
         self.frequency = frequency
         self.tickers = []
         self.years = years
