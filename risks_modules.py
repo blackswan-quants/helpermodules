@@ -1,3 +1,7 @@
+import numpy as np
+import math
+import pandas as pd
+import yfinance as yf
 def evaluate_cagr(prices):
   """
     Evaluate the Compound Annual Growth Rate (CAGR) given a list of prices.
