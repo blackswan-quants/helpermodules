@@ -3,7 +3,6 @@ import datetime as dt
 import os
 import pandas as pd
 from twelvedata import TDClient
-import re
 from helpermodules.memory_handling import PickleHelper
 from dotenv import load_dotenv
 import time
@@ -44,27 +43,54 @@ class DataFrameHelper:
         self.tickers = []
         self.years = years
         self.months = months
+        self.dataframe = None  # Initialize dataframe attribute
 
     def load(self):
         """
-        Load a DataFrame of stock price data from a pickle file if it exists, otherwise create a new DataFrame.
+        Loads a DataFrame of stock price data from a pickle file if it exists; otherwise, fetches data from API.
+
+        The function first attempts to load stock data from a pickle file, which contains historical price data.
+        If no file is found, it fetches ticker symbols from the specified Wikipedia page, retrieves new stock data
+        from the API, and saves it to a pickle file.
+
         Returns:
-            pandas.DataFrame or None: DataFrame containing stock price data if loaded successfully, otherwise None.
+            pandas.DataFrame: DataFrame containing stock price data if successfully loaded or retrieved.
+            If neither option succeeds, returns None.
         """
-        if not re.search("^.*\.pkl$", self.filename):
+        # Ensure filename ends with '.pkl'
+        if not self.filename.endswith(".pkl"):
             self.filename += ".pkl"
-        file_path = "./pickle_files/" + self.filename
 
+        # Construct file path using os.path.join for compatibility
+        file_path = os.path.join("pickle_files", self.filename)
+
+        # Attempt to load from existing pickle file
         if os.path.isfile(file_path):
-            self.dataframe = PickleHelper.pickle_load(self.filename).obj
-            self.tickers = self.dataframe.columns.tolist()
-            return self.dataframe
-        else:
+            try:
+                self.dataframe = PickleHelper.pickle_load(self.filename).obj
+                self.tickers = self.dataframe.columns.tolist()
+                print(f"Loaded data from {self.filename}")
+                return self.dataframe
+            except Exception as e:
+                print(f"Error loading pickle file '{self.filename}': {e}")
+
+        # If file not found, attempt to fetch new data
+        try:
             self.tickers = self.get_stockex_tickers()
+            if not self.tickers:
+                print("No tickers found. Unable to retrieve data.")
+                return None  # Exit if no tickers are found
+
             self.dataframe = self.loaded_df()
+            if self.dataframe is not None:
+                print("New data fetched and loaded successfully.")
+            else:
+                print("Failed to fetch new data.")
 
-        return None
-
+            return self.dataframe
+        except Exception as e:
+            print(f"Error retrieving data: {e}")
+            return None
 
     def get_stockex_tickers(self):
         """
