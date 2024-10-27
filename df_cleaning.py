@@ -6,6 +6,7 @@ import time
 import pandas as pd
 from dotenv import load_dotenv
 from twelvedata import TDClient
+import yfinance as yf
 
 from memory_handling import PickleHelper  # Switched to relative import
 
@@ -174,13 +175,11 @@ class DataFrameHelper:
 
     def loaded_df(self):
         """
-        Download historical stock price data for the specified time window and tickers.
+        Downloads historical stock price data for the specified time window and tickers using the Twelve Data API
+        or yfinance based on the preferred method.
 
         Returns:
             pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
-
-        Raises:
-            ValueError: If both years and months are provided, or neither is specified.
         """
         if (self.years is None) == (self.months is None):  # both or neither
             raise ValueError("Specify exactly one of 'years' or 'months'.")
