@@ -1,11 +1,75 @@
-
+import logging
 import datetime as dt
 import os
 import pandas as pd
+from pandas.core.interchange.dataframe_protocol import DataFrame
 from twelvedata import TDClient
 from helpermodules.memory_handling import PickleHelper
 from dotenv import load_dotenv
 import time
+
+
+def divide_tickers(tickers, batch_size=55):
+    """
+    Splits a list of ticker symbols into smaller batches for API requests.
+
+    Args:
+        tickers (List[str]): List of ticker symbols.
+        batch_size (int): Maximum number of tickers per batch.
+
+    Returns:
+        List[List[str]]: A list of batches, each containing up to batch_size tickers.
+    """
+    return [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
+
+
+def API_limit(ticker_batches, frequency, start_date, end_date):
+    """
+    Retrieve historical stock price data from the Twelve Data API in batches, with rate limiting.
+
+    Args:
+        ticker_batches (List[List[str]]): List of ticker symbol batches.
+        frequency (str): Time frequency for data (e.g., '1day').
+        start_date (str): Start date for data retrieval in 'YYYY-MM-DD' format.
+        end_date (str): End date for data retrieval in 'YYYY-MM-DD' format.
+
+    Returns:
+        pandas.DataFrame or None: DataFrame with stock price data for all tickers in ticker_batches, or None if no data was retrieved.
+    """
+    # Load API key from environment variables
+    load_dotenv()
+    API_KEY = os.getenv('API_KEY')
+    if not API_KEY:
+        raise ValueError("API_KEY not found in environment variables.")
+
+    td = TDClient(apikey=API_KEY)
+    all_dataframes = []
+
+    for i, ticker_list in enumerate(ticker_batches):
+        logging.info(f'Processing batch {i + 1}/{len(ticker_batches)}')
+        try:
+            # Request data from Twelve Data API
+            dataframe = td.time_series(
+                symbol=ticker_list,
+                interval=frequency,
+                start_date=start_date,
+                end_date=end_date,
+                outputsize=5000,
+                timezone="America/New_York",
+            ).as_pandas()
+            all_dataframes.append(dataframe)
+            logging.info('Waiting 60 seconds before next batch...')
+            time.sleep(60)  # Rate limiting
+
+        except Exception as e:
+            logging.error(f"Error fetching data for batch {i + 1}: {e}")
+            continue
+
+    if all_dataframes:
+        return pd.concat(all_dataframes, ignore_index=True)
+    logging.warning('No data retrieved from API.')
+    return None
+
 
 class DataFrameHelper:
     """
@@ -109,94 +173,25 @@ class DataFrameHelper:
 
     def loaded_df(self):
         """
-        Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
+        Download historical stock price data for the specified time window and tickers.
+
         Returns:
             pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
-        """
-        
-        if self.years is not None and self.months is None:
-            time_window_months = self.years * 12
-        elif self.months is not None and self.years is None:
-            time_window_months = self.months
-        else:
-            raise ValueError("Exactly one of 'years' or 'months' should be provided.")
 
+        Raises:
+            ValueError: If both years and months are provided, or neither is specified.
+        """
+        if (self.years is None) == (self.months is None):  # both or neither
+            raise ValueError("Specify exactly one of 'years' or 'months'.")
+
+        time_window_months = self.years * 12 if self.years else self.months
         end_date = dt.date.today()
         start_date = end_date - pd.DateOffset(months=time_window_months)
-        start_date_str = start_date.strftime("%Y-%m-%d")
-        end_date_str = end_date.strftime("%Y-%m-%d")
+        start_date_str, end_date_str = start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
-        # Divide tickers into batches
-        def divide_tickers(tickers):
-            return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
-
-        # Make API calls for each batch with rate limiting
-        def API_limit(ticker_batches):
-            """
-            Retrieve historical stock price data from Twelve Data API in batches, with rate limiting to avoid exceeding API request limits.
-
-            Args:
-                ticker_batches (List[List[str]]): List of ticker symbol batches, each containing up to 55 tickers.
-
-            Returns:
-                pandas.DataFrame or None: Concatenated DataFrame containing stock price data for all tickers in ticker_batches,
-                or None if no data was successfully retrieved.
-
-            Raises:
-                ValueError: If the API key is missing or the API call encounters an error.
-
-            Notes:
-                - The function loads the API key from environment variables.
-                - The Twelve Data API has a rate limit, so the function pauses for 60 seconds between batches.
-                - Requires `dotenv` to load the API key and `twelvedata` to make API calls.
-            """
-
-            # Load API key from environment variables
-            load_dotenv()
-            API_KEY = os.getenv('API_KEY')
-            if not API_KEY:
-                raise ValueError("API_KEY not found in environment variables.")
-
-            td = TDClient(apikey=API_KEY)
-            all_dataframes = []
-
-            # Iterate through ticker batches with rate limiting
-            for i, ticker_list in enumerate(ticker_batches):
-                print(f'Processing batch {i + 1}/{len(ticker_batches)}')
-
-                try:
-                    # Request data from Twelve Data API
-                    dataframe = td.time_series(
-                        symbol=ticker_list,
-                        interval=self.frequency,
-                        start_date=start_date_str,
-                        end_date=end_date_str,
-                        outputsize=5000,
-                        timezone="America/New_York",
-                    ).as_pandas()
-
-                    # Append the dataframe for the current batch
-                    all_dataframes.append(dataframe)
-                    print('Please wait a minute while processing the next batch...')
-                    time.sleep(60)  # Rate limiting: wait 60 seconds between batches
-
-                except Exception as e:
-                    print(f"Error fetching data for batch {i + 1}: {e}")
-                    continue  # Skip to the next batch if an error occurs
-
-            # Concatenate all dataframes if available, else return None
-            if all_dataframes:
-                stocks_dataframe = pd.concat(all_dataframes, ignore_index=True)
-                return stocks_dataframe
-            else:
-                print('No data retrieved.')
-                return None
-
-        # Divide tickers into batches
+        # Prepare and call API_limit
         ticker_batches = divide_tickers(self.tickers)
-        # Make API calls for each batch with rate limiting
-        stocks_df = API_limit(ticker_batches)
-        return stocks_df
+        return API_limit(ticker_batches, self.frequency, start_date_str, end_date_str)
 
     def clean_df(self, percentage):
         """
