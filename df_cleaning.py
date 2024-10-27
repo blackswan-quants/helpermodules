@@ -1,12 +1,14 @@
-import logging
 import datetime as dt
+import logging
 import os
-import pandas as pd
-from pandas.core.interchange.dataframe_protocol import DataFrame
-from twelvedata import TDClient
-from memory_handling import PickleHelper #Switched to relative import
-from dotenv import load_dotenv
 import time
+
+import pandas as pd
+from dotenv import load_dotenv
+from twelvedata import TDClient
+
+from memory_handling import PickleHelper  # Switched to relative import
+
 
 def divide_tickers(tickers, batch_size=55):
     """
@@ -139,7 +141,7 @@ class DataFrameHelper:
 
         # If file not found, attempt to fetch new data
         try:
-            self.tickers = self.get_stockex_tickers()
+            self.get_stockex_tickers()
             if not self.tickers:
                 print("No tickers found. Unable to retrieve data.")
                 return None  # Exit if no tickers are found
@@ -222,4 +224,3 @@ class DataFrameHelper:
 
         # Save the cleaned DataFrame
         PickleHelper(obj=self.dataframe).pickle_dump(filename='cleaned_dataframe')
-
