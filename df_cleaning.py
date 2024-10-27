@@ -104,15 +104,40 @@ class DataFrameHelper:
 
         # Make API calls for each batch with rate limiting
         def API_limit(ticker_batches):
+            """
+            Retrieve historical stock price data from Twelve Data API in batches, with rate limiting to avoid exceeding API request limits.
+
+            Args:
+                ticker_batches (List[List[str]]): List of ticker symbol batches, each containing up to 55 tickers.
+
+            Returns:
+                pandas.DataFrame or None: Concatenated DataFrame containing stock price data for all tickers in ticker_batches,
+                or None if no data was successfully retrieved.
+
+            Raises:
+                ValueError: If the API key is missing or the API call encounters an error.
+
+            Notes:
+                - The function loads the API key from environment variables.
+                - The Twelve Data API has a rate limit, so the function pauses for 60 seconds between batches.
+                - Requires `dotenv` to load the API key and `twelvedata` to make API calls.
+            """
+
+            # Load API key from environment variables
             load_dotenv()
             API_KEY = os.getenv('API_KEY')
-            td = TDClient(apikey=API_KEY)
+            if not API_KEY:
+                raise ValueError("API_KEY not found in environment variables.")
 
+            td = TDClient(apikey=API_KEY)
             all_dataframes = []
 
+            # Iterate through ticker batches with rate limiting
             for i, ticker_list in enumerate(ticker_batches):
-                print(f'Processing batch {i+1}/{len(ticker_batches)}')
+                print(f'Processing batch {i + 1}/{len(ticker_batches)}')
+
                 try:
+                    # Request data from Twelve Data API
                     dataframe = td.time_series(
                         symbol=ticker_list,
                         interval=self.frequency,
@@ -121,18 +146,22 @@ class DataFrameHelper:
                         outputsize=5000,
                         timezone="America/New_York",
                     ).as_pandas()
-                    all_dataframes.append(dataframe)
-                    print('Please wait a minute...')  # Insert appropriate message here
-                    time.sleep(60)  # Rate limiting: wait 60 seconds between batches
-                except Exception as e:
-                    print(f"Error fetching data for batch {i+1}: {e}")
 
+                    # Append the dataframe for the current batch
+                    all_dataframes.append(dataframe)
+                    print('Please wait a minute while processing the next batch...')
+                    time.sleep(60)  # Rate limiting: wait 60 seconds between batches
+
+                except Exception as e:
+                    print(f"Error fetching data for batch {i + 1}: {e}")
+                    continue  # Skip to the next batch if an error occurs
+
+            # Concatenate all dataframes if available, else return None
             if all_dataframes:
-                # Concatenate all dataframes into a single dataframe
                 stocks_dataframe = pd.concat(all_dataframes, ignore_index=True)
                 return stocks_dataframe
             else:
-                print('The dataframe is empty.')
+                print('No data retrieved.')
                 return None
 
         # Divide tickers into batches
