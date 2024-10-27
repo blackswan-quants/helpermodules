@@ -98,8 +98,8 @@ class CorrelationAnalysis:
         for i in range(len(tmp_arr)):
             tmp_arr[i, i] = 0
         max_corr = np.nanmax(tmp_arr)
-        max_indexes = np.where(self.corrvalues == max_corr)
-        max_pair = [self.tickers[max_indexes[0][0]], self.tickers[max_indexes[0][1]]]
+        max_indexes = np.where(tmp_arr == max_corr) # put tmp_arr instead of self.corrvalues
+        # max_pair = [self.tickers[max_indexes[0][0]], self.tickers[max_indexes[0][1]]]
 
         corr_order = np.argsort(tmp_arr.flatten())
         corr_num = corr_order[-1]
