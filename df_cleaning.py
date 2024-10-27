@@ -4,10 +4,9 @@ import os
 import pandas as pd
 from pandas.core.interchange.dataframe_protocol import DataFrame
 from twelvedata import TDClient
-from helpermodules.memory_handling import PickleHelper
+from memory_handling import PickleHelper #Switched to relative import
 from dotenv import load_dotenv
 import time
-
 
 def divide_tickers(tickers, batch_size=55):
     """
@@ -195,28 +194,32 @@ class DataFrameHelper:
 
     def clean_df(self, percentage):
         """
-        Cleans the DataFrame by dropping stocks with NaN values exceeding the given percentage threshold.
-        The cleaned DataFrame is pickled after the operation.
+        Cleans the DataFrame by removing columns (tickers) with NaN values exceeding a specified threshold.
 
         Parameters:
-        self
+        ----------
         percentage : float
             Percentage threshold for NaN values. If greater than 1, it's interpreted as a percentage (e.g., 5 for 5%).
-        
+
         Returns:
+        -------
         None
         """
-        if percentage > 1:
-            percentage = percentage / 100
+        # Convert percentage if given as an integer greater than 1
+        threshold = percentage / 100 if percentage > 1 else percentage
 
+        # Drop tickers with NaN values exceeding the threshold
         for ticker in self.tickers:
-            nan_values = self.dataframe[ticker].isnull().values.any()
-            if nan_values:
-                count_nan = self.dataframe[ticker].isnull().sum()
-                if count_nan > (len(self.dataframe) * percentage):
-                    self.dataframe.drop(ticker, axis=1, inplace=True)
+            if self.dataframe[ticker].isna().sum() > (len(self.dataframe) * threshold):
+                self.dataframe.drop(columns=[ticker], inplace=True)
 
+        # Fill remaining NaN values using forward fill
         self.dataframe.fillna(method='ffill', inplace=True)
-        #FIXME: fml this doesn't work if i have consecutive days
-        PickleHelper(obj=self.dataframe).pickle_dump(filename='cleaned_nasdaq_dataframe')
+
+        # Drop any remaining columns with NaN values /// If two consecutive days are NaN the entire column gets dropped. Don't know if this is a good
+        # approach in this case, depends on how common NaNs are.
+        self.dataframe.dropna(axis=1, inplace=True)
+
+        # Save the cleaned DataFrame
+        PickleHelper(obj=self.dataframe).pickle_dump(filename='cleaned_dataframe')
 
