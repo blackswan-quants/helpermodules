@@ -95,15 +95,17 @@ class DataFrameHelper:
     def get_stockex_tickers(self):
         """
         Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
-        Returns:
-            List[str]: List of ticker symbols extracted from the specified Wikipedia page.
+        Sets the `self.tickers` attribute with the extracted ticker symbols.
         """
-        tables = pd.read_html(self.link)
-        df = tables[4]
-        df.drop(['Company', 'GICS Sector', 'GICS Sub-Industry'],
-                axis=1, inplace=True)
-        tickers = df['Ticker'].values.tolist()
-        return tickers
+        try:
+            tables = pd.read_html(self.link)
+            df = tables[4]
+            df.drop(['Company', 'GICS Sector', 'GICS Sub-Industry'], axis=1, inplace=True)
+            self.tickers = df['Ticker'].values.tolist()
+            print(f"Retrieved {len(self.tickers)} tickers from {self.link}")
+        except Exception as e:
+            print(f"Error retrieving tickers from {self.link}: {e}")
+            self.tickers = []  # Reset tickers if there's an error
 
     def loaded_df(self):
         """
