@@ -8,7 +8,7 @@ from keras.callbacks import History
 from zlib import crc32
 import re
 
-from memory_handling import PickleHelper
+from helpermodules.memory_handling import PickleHelper
 
 def hashing_and_splitting(adj_close_stocks_dataframe):
     """
