@@ -61,6 +61,7 @@ def xtrain_ytrain(adj_close_stocks_dataframe):
     xtest, ytest = np.array(xtest), np.array(ytest)
     return xtrain, ytrain, xtest, ytest, sc
 
+
 def lstm_model(xtrain, ytrain):
     """
     Builds and trains an LSTM model using the training data.
@@ -73,8 +74,24 @@ def lstm_model(xtrain, ytrain):
         Sequential: Trained LSTM model.
     """
     model = Sequential()
+    #1st Layer
     model.add(LSTM(units=50, activation='relu',
                   return_sequences=True, input_shape=(xtrain.shape[1], 1)))
-    model.add(Dropout(0.2))
+    model.add(Dropout(0.2))#Turn off 20% of the neurons casually
+    #2nd Layer
     model.add(LSTM(units=60, activation='relu', return_sequences=True))
-    model.add #FIXME: something weird happened here, idk where the code went 
+    model.add(Dropout(0.3))
+    #3rd Layer
+    model.add(LSTM(units=80, activation='relu', return_sequences=True))
+    model.add(Dropout(0.4))
+    #4th Layer
+    model.add(LSTM(units=120, activation='relu')) #We don't return (no need to add other layers)
+    model.add(Dropout(0.5))
+
+    model.add(Dense(units=1)) # n°of Output
+    model.compile(optimizer='adam', loss='mean_squared_error')
+
+    #Train (Parameters to be tried)
+    model.fit(xtrain, ytrain, epochs=50, batch_size=32)
+
+    return model
