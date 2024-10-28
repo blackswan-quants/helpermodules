@@ -187,10 +187,13 @@ class DataFrameHelper:
             print(f"Error retrieving tickers from {self.link}: {e}")
             self.tickers = []  # Reset tickers if there's an error
 
-    def loaded_df(self):
+    def loaded_df(self, use_yfinance=False):
         """
-        Downloads historical stock price data for the specified time window and tickers using the Twelve Data API
-        or yfinance based on the preferred method.
+        Downloads historical stock price data for the specified time window and tickers using either the Twelve Data API
+        or yfinance, based on the preferred method.
+
+        Args:
+            use_yfinance (bool): If True, uses yfinance to download data instead of the Twelve Data API.
 
         Returns:
             pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
@@ -203,7 +206,19 @@ class DataFrameHelper:
         start_date = end_date - pd.DateOffset(months=time_window_months)
         start_date_str, end_date_str = start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
-        # Prepare and call API_limit
+        if use_yfinance:
+            # Using yfinance to download data
+            try:
+                data = yf.download(self.tickers, start=start_date_str, end=end_date_str, interval=self.frequency)
+                # Adjusting format if multiple tickers are used
+                if len(self.tickers) == 1:
+                    data.columns = [self.tickers[0]]  # Rename column if only one ticker is downloaded
+                return data
+            except Exception as e:
+                print(f"Error downloading data with yfinance: {e}")
+                return None
+
+        # Using Twelve Data API
         ticker_batches = divide_tickers(self.tickers)
         return API_limit(ticker_batches, self.frequency, start_date_str, end_date_str)
 
