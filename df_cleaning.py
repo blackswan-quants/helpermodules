@@ -254,13 +254,13 @@ class DataFrameHelper:
             # Check if the ticker exists as a first-level column in the DataFrame
             if ticker in self.dataframe.columns.get_level_values(1):
                 # Calculate the percentage of NaN values for that ticker across all fields
-                if self.dataframe[ticker].xs(ticker,axis=1,level=1).isna().sum().sum() > (len(self.dataframe) * threshold):
-                    self.dataframe.drop(columns=[ticker], level=0, inplace=True)
+                if self.dataframe.xs(ticker,axis=1,level=1).isna().sum().sum() > (len(self.dataframe) * threshold):
+                    self.dataframe.drop(columns=[ticker], level=1, inplace=True)
             else:
                 print(f"Warning: Ticker '{ticker}' not found in DataFrame columns.")
 
         # Fill remaining NaN values using forward fill
-        self.dataframe.fillna(method='ffill', inplace=True)
+        self.dataframe.ffill(inplace=True)
 
         # Drop any remaining columns with NaN values /// If two consecutive days are NaN the entire column gets dropped. Don't know if this is a good
         # approach in this case, depends on how common NaNs are.
