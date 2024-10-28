@@ -80,9 +80,10 @@ class DataFrameHelper:
     Parameters:
         filename (str): Name of the pickle file to save or load data from.
         link (str): URL to a Wikipedia page with stock exchange ticker information.
-        frequency (str): Frequency of the historical data (e.g., '1day', '1week').
+        frequency (str): Frequency of the historical data (e.g., '1d', '1wk').
         years (int, optional): Number of years of historical data to load.
         months (int, optional): Number of months of historical data to load.
+        yfinance (bool, optional): Flag to determine if yfinance should be used for data retrieval (default: True).
 
     Methods:
         load():
@@ -116,7 +117,7 @@ class DataFrameHelper:
                 None: The method updates `self.dataframe` with cleaned data, removing any columns with excessive NaNs.
     """
 
-    def __init__(self, filename, link, frequency, years=None, months=None):
+    def __init__(self, filename, link, frequency, years=None, months=None,yfinance=True):
         self.filename = filename
         self.link = link
         self.frequency = frequency
@@ -124,6 +125,7 @@ class DataFrameHelper:
         self.years = years
         self.months = months
         self.dataframe = None  # Initialize dataframe attribute
+        self.yfinance = yfinance
 
     def load(self):
         """
@@ -193,7 +195,7 @@ class DataFrameHelper:
             print(f"Error retrieving tickers from {self.link}: {e}")
             self.tickers = []  # Reset tickers if there's an error
 
-    def loaded_df(self, use_yfinance=False):
+    def loaded_df(self):
         """
         Downloads historical stock price data for the specified time window and tickers using either the Twelve Data API
         or yfinance, based on the preferred method.
@@ -212,7 +214,10 @@ class DataFrameHelper:
         start_date = end_date - pd.DateOffset(months=time_window_months)
         start_date_str, end_date_str = start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
-        if use_yfinance:
+        if not isinstance(self.yfinance, bool):
+            raise TypeError(f"Expected 'yfinance' to be a boolean, but got {type(self.yfinance).__name__}")
+
+        if self.yfinance:
             # Using yfinance to download data
             try:
                 data = yf.download(self.tickers, start=start_date_str, end=end_date_str, interval=self.frequency)
@@ -246,8 +251,13 @@ class DataFrameHelper:
 
         # Drop tickers with NaN values exceeding the threshold
         for ticker in self.tickers:
-            if self.dataframe[ticker].isna().sum() > (len(self.dataframe) * threshold):
-                self.dataframe.drop(columns=[ticker], inplace=True)
+            # Check if the ticker exists as a first-level column in the DataFrame
+            if ticker in self.dataframe.columns.get_level_values(1):
+                # Calculate the percentage of NaN values for that ticker across all fields
+                if self.dataframe[ticker].xs(ticker,axis=1,level=1).isna().sum().sum() > (len(self.dataframe) * threshold):
+                    self.dataframe.drop(columns=[ticker], level=0, inplace=True)
+            else:
+                print(f"Warning: Ticker '{ticker}' not found in DataFrame columns.")
 
         # Fill remaining NaN values using forward fill
         self.dataframe.fillna(method='ffill', inplace=True)
