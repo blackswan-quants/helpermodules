@@ -2,13 +2,13 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from keras.src.models import Sequential
-from keras.src.layers import Dense, LSTM, Dropout
-from keras.src.callbacks import History
+from keras.models import Sequential
+from keras.layers import Dense, LSTM, Dropout
+from keras.callbacks import History
 from zlib import crc32
 import re
 
-from helpermodules.memory_handling import PickleHelper # Why is this not a relative import?
+from memory_handling import PickleHelper
 
 def hashing_and_splitting(adj_close_stocks_dataframe):
     """
