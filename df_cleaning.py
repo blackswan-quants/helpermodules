@@ -178,11 +178,17 @@ class DataFrameHelper:
         Sets the `self.tickers` attribute with the extracted ticker symbols.
         """
         try:
+            # Read all tables on the Wikipedia page
             tables = pd.read_html(self.link)
-            df = tables[4]
-            df.drop(['Company', 'GICS Sector', 'GICS Sub-Industry'], axis=1, inplace=True)
-            self.tickers = df['Ticker'].values.tolist()
-            print(f"Retrieved {len(self.tickers)} tickers from {self.link}")
+            print(f"Found {len(tables)} tables on the page.")
+
+            # Find the first table with at least one column and select only the first column
+            for table in tables:
+                self.tickers = table.loc[:, "Symbol"].dropna().tolist()  # Get the first column and drop any NaN values
+                print(f"Retrieved {len(self.tickers)} tickers from the first column of the table.")
+                return  # Exit after finding the first valid table
+
+            print("No valid table found with ticker symbols.")
         except Exception as e:
             print(f"Error retrieving tickers from {self.link}: {e}")
             self.tickers = []  # Reset tickers if there's an error
