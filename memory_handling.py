@@ -1,7 +1,7 @@
 # Libraries used
 import pickle
 import re
-
+import os
 
 class PickleHelper:
     def __init__(self, obj):
@@ -24,7 +24,11 @@ class PickleHelper:
         if not re.search(r"^.*\.pkl$", filename):
             filename += ".pkl"
 
-        file_path = "./pickle_files/" + filename
+        # Ensure the directory exists
+        dir_path = "./pickle_files/"
+        os.makedirs(dir_path, exist_ok=True)
+
+        file_path = os.path.join(dir_path, filename)
         with open(file_path, "wb") as f:
             pickle.dump(self.obj, f)
 
