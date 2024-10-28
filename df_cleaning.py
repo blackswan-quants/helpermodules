@@ -78,28 +78,42 @@ class DataFrameHelper:
     A class for downloading and processing historical stock price data using the Twelve Data API.
 
     Parameters:
-        filename (str): Name of the pickle file to save or load DataFrame.
-        link (str): URL link to a Wikipedia page containing stock exchange information.
-        interval (str): Time frequency of historical data to load (e.g., '1min', '1day', '1W').
-        frequency (str): Frequency of data intervals ('daily', 'weekly', 'monthly', etc.).
-        years (int, optional): Number of years of historical data to load (default: None).
-        months (int, optional): Number of months of historical data to load (default: None).
+        filename (str): Name of the pickle file to save or load data from.
+        link (str): URL to a Wikipedia page with stock exchange ticker information.
+        frequency (str): Frequency of the historical data (e.g., '1day', '1week').
+        years (int, optional): Number of years of historical data to load.
+        months (int, optional): Number of months of historical data to load.
 
     Methods:
         load():
-            Loads a DataFrame of stock price data from a pickle file if it exists, otherwise creates a new DataFrame.
+            Attempts to load data from a pickle file; if unsuccessful, fetches new data from the API.
+
             Returns:
-                pandas.DataFrame or None: DataFrame containing stock price data if loaded successfully, otherwise None.
+                pd.DataFrame or None: Returns a DataFrame with stock price data if successfully loaded or retrieved;
+                returns None if neither option succeeds.
 
         get_stockex_tickers():
-            Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
+            Retrieves ticker symbols from a specified Wikipedia page and stores them in `self.tickers`.
+
             Returns:
-                List[str]: List of ticker symbols extracted from the specified Wikipedia page.
+                None: This method updates the `self.tickers` attribute with a list of tickers from the webpage.
 
         loaded_df():
-            Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
+            Downloads historical data for the tickers over a specified time window.
+
             Returns:
-                pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
+                pd.DataFrame or None: Returns a DataFrame containing the downloaded stock price data for the specified
+                tickers and time period; returns None if data retrieval fails.
+
+        clean_df(percentage):
+            Cleans the DataFrame by removing columns with NaN values exceeding a specified threshold.
+
+            Parameters:
+                percentage (float): The threshold percentage of NaN values for removing a ticker's data. For example,
+                if `percentage` is 5, tickers with more than 5% missing data are removed.
+
+            Returns:
+                None: The method updates `self.dataframe` with cleaned data, removing any columns with excessive NaNs.
     """
 
     def __init__(self, filename, link, frequency, years=None, months=None):
@@ -204,7 +218,7 @@ class DataFrameHelper:
 
         Returns:
         -------
-        None
+        None: The method updates `self.dataframe` with cleaned data, removing any columns with excessive NaNs.
         """
         # Convert percentage if given as an integer greater than 1
         threshold = percentage / 100 if percentage > 1 else percentage
