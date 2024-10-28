@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 
 #TODO: added docstrings + error handling + fixed some spaghetti code + generalized a function
+
 class Asset:
     """
     Represents an asset, such as an ETF (Exchange-Traded Fund), with associated data and functionality.
@@ -17,13 +18,21 @@ class Asset:
     - df (pandas.DataFrame): The DataFrame containing historical data of the asset.
     - index_name (str): The name of the index that the asset tracks (if applicable).
     - ter (float): The Total Expense Ratio (TER) of the asset.
+    - isin (str): The unique ISIN code of the asset (International Securities Identification Number).
 
     Methods:
     - apply_ter(ter): Apply a specified TER to adjust the asset's historical data.
+    - extract_value_from_html(data, start_pattern, end_pattern): Retrieve the informations contained by 
+        the given HTML script and located between start_pattern and end_pattern strings.
     - update_from_html(extraction_type): Update asset attributes (e.g., ISIN, TER) by extracting
-      information from HTML data based on the specified extraction type ('isin' or 'ter').
+        information from HTML data based on the specified extraction type ('isin' or 'ter').
     - update_index_name(): Update the index name of the asset by extracting information from a webpage
-      based on its ISIN (International Securities Identification Number).
+        based on its ISIN.
+    - load_df(): Update the 'df' attribute fetching monthly datas via twelvedata API.
+    - load(): If an ETF is called, it updates the following attributes ('isin', 'ter', 'df', 'index_name') via implicit
+        call of the above functions.
+        Otherwise, it updates just the 'df' attribute. 
+    - info() : Print out the asset's attributes.
     """
     
     def __init__(self, type, ticker, full_name):
@@ -106,6 +115,11 @@ class Asset:
 
 
     def update_index_name(self):
+        """
+        Update the object's attribute 'index_name' with the index tracked by the given asset (most likely ETFs, Funds)
+
+        """
+
         if self.isin is None:
             raise ValueError("ISIN is required to update index name.")
 
@@ -121,6 +135,11 @@ class Asset:
         browser.quit()
         
     def load_df(self):
+        """
+        Update the object's attribute 'df' with the time series of the stock's prices 
+        turned to a dataframe (interval set to one month)
+
+        """
         load_dotenv()
         API_KEY = os.getenv('API_KEY')
         td = TDClient(apikey=API_KEY)
@@ -142,6 +161,11 @@ class Asset:
         self.df = df.as_pandas()
 
     def load(self):
+        '''
+        If an ETF is given, it updates the object's attributes ('isin', 'ter', 'index_name', 'df') related to the chosen stock
+        Otherwise, it updates just the 'df' attribute
+        
+        '''
         if self.type == 'ETF':
             self.update_from_html('isin')
             self.update_from_html('ter')
@@ -149,6 +173,11 @@ class Asset:
         self.load_df()
     
     def info(self):
+        '''
+        It prints out the following informations for the chosen stock: 
+        ('Full name', 'Ticker', 'Type', 'Ter', 'Index name', 'ISIN' , 'Dataframe')
+
+        '''
         print("Full name: ", self.full_name)
         print("Ticker: ", self.ticker)
         print("Type: ", self.type)
