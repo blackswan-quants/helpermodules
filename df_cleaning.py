@@ -37,6 +37,8 @@ def API_limit(ticker_batches, frequency, start_date, end_date):
 
     Returns:
         pandas.DataFrame or None: DataFrame with stock price data for all tickers in ticker_batches, or None if no data was retrieved.
+    TODO: frequency information is currently not being passed correctly (12data and yfinance require different frequency formats).
+    Requires API key to be tested
     """
     # Load API key from environment variables
     load_dotenv()
@@ -150,7 +152,8 @@ class DataFrameHelper:
         if os.path.isfile(file_path):
             try:
                 self.dataframe = PickleHelper.pickle_load(self.filename).obj
-                self.tickers = self.dataframe.columns.tolist()
+                #self.tickers = self.dataframe.columns.tolist() /// Would work with 12data, not with yfinance
+                self.tickers = self.dataframe.columns.get_level_values(1).tolist()
                 print(f"Loaded data from {self.filename}")
                 return self.dataframe
             except Exception as e:
@@ -248,6 +251,8 @@ class DataFrameHelper:
         """
         # Convert percentage if given as an integer greater than 1
         threshold = percentage / 100 if percentage > 1 else percentage
+
+        #Currently only working with yfinance (cannot test with 12data because of lack of API key)
 
         # Drop tickers with NaN values exceeding the threshold
         for ticker in self.tickers:
