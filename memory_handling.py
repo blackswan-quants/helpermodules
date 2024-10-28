@@ -2,6 +2,7 @@
 import pickle
 import re
 
+
 class PickleHelper:
     def __init__(self, obj):
         self.obj = obj
@@ -20,7 +21,7 @@ class PickleHelper:
         Returns:
         None
         """
-        if not re.search("^.*\.pkl$", filename):
+        if not re.search(r"^.*\.pkl$", filename):
             filename += ".pkl"
 
         file_path = "./pickle_files/" + filename
@@ -41,7 +42,7 @@ class PickleHelper:
         obj: PickleHelper
             A PickleHelper object with the obj loaded from the file accessible through its .obj attribute 
         """
-        if not re.search("^.*\.pkl$", filename):
+        if not re.search(r"^.*\.pkl$", filename):
             filename += ".pkl"
 
         file_path = "./pickle_files/" + filename
