@@ -14,31 +14,46 @@ class IndexData_Retrieval:
     A class for downloading and processing historical stock price data using the Twelve Data API.
 
     Parameters:
-        filename (str): Name of the pickle file to save or load df.
-        link (str): URL link to a Wikipedia page containing stock exchange information.
-        interval (str): Time self.frequency of historical data to load (e.g., '1min', '1day', '1W').
-        self.frequency (str): self.frequency of data intervals ('daily', 'weekly', 'monthly', etc.).
-        years (int, optional): Number of years of historical data to load (default: None).
-        months (int, optional): Number of months of historical data to load (default: None).
+        filename (str): Name of the pickle file to save or load data from.
+        link (str): URL to a Wikipedia page with stock exchange ticker information.
+        frequency (str): Frequency of the historical data (e.g., '1d', '1wk').
+        years (int, optional): Number of years of historical data to load.
+        months (int, optional): Number of months of historical data to load.
+        yfinance (bool, optional): Flag to determine if yfinance should be used for data retrieval (default: True).
 
     Methods:
-        getdata():
-            Loads a df of stock price data from a pickle file if it exists, otherwise creates a new df.
+        load():
+            Attempts to load data from a pickle file; if unsuccessful, fetches new data from the API.
+
             Returns:
-                pandas.df or None: df containing stock price data if loaded successfully, otherwise None.
+                pd.DataFrame or None: Returns a DataFrame with stock price data if successfully loaded or retrieved;
+                returns None if neither option succeeds.
 
         get_stockex_tickers():
-            Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
+            Retrieves ticker symbols from a specified Wikipedia page and stores them in `self.tickers`.
+
             Returns:
-                List[str]: List of ticker symbols extracted from the specified Wikipedia page.
+                None: This method updates the `self.tickers` attribute with a list of tickers from the webpage.
 
         loaded_df():
-            Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
+            Downloads historical data for the tickers over a specified time window.
+
             Returns:
-                pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
+                pd.DataFrame or None: Returns a DataFrame containing the downloaded stock price data for the specified
+                tickers and time period; returns None if data retrieval fails.
+
+        clean_df(percentage):
+            Cleans the DataFrame by removing columns with NaN values exceeding a specified threshold.
+
+            Parameters:
+                percentage (float): The threshold percentage of NaN values for removing a ticker's data. For example,
+                if `percentage` is 5, tickers with more than 5% missing data are removed.
+
+            Returns:
+                None: The method updates `self.dataframe` with cleaned data, removing any columns with excessive NaNs.
     """
 
-    def __init__(self, filename, link, frequency, years=None, months=None):
+    def __init__(self, filename, link, frequency, years=None, months=None,yfinance=True):
         self.filename = filename
         self.link = link
         self.df = pd.DataFrame()
@@ -46,40 +61,77 @@ class IndexData_Retrieval:
         self.tickers = []
         self.years = years
         self.months = months
+        self.yfinance = yfinance
 
     def getdata(self):
         """
-        Load a df of stock price data from a pickle file if it exists, otherwise create a new df.
+        Loads a DataFrame of stock price data from a pickle file if it exists; otherwise, fetches data from API.
+
+        The function first attempts to load stock data from a pickle file, which contains historical price data.
+        If no file is found, it fetches ticker symbols from the specified Wikipedia page, retrieves new stock data
+        from the API, and saves it to a pickle file.
+
         Returns:
-            pandas.df or None: df containing stock price data if loaded successfully, otherwise None.
+            pandas.DataFrame: DataFrame containing stock price data if successfully loaded or retrieved.
+            If neither option succeeds, returns None.
         """
-        if not re.search("^.*\.pkl$", self.filename):
+        # Ensure filename ends with '.pkl'
+        if not self.filename.endswith(".pkl"):
             self.filename += ".pkl"
-        file_path = "./pickle_files/" + self.filename
 
+        # Construct file path using os.path.join for compatibility
+        file_path = os.path.join("pickle_files", self.filename)
+
+        # Attempt to load from existing pickle file
         if os.path.isfile(file_path):
-            self.df = PickleHelper.pickle_load(self.filename).obj
-            self.tickers = self.df.columns.tolist()
-            return self.df
-        else:
-            self.tickers = self.get_stockex_tickers()
-            self.df = self.loaded_df()
+            try:
+                self.df = PickleHelper.pickle_load(self.filename).obj
+                #self.tickers = self.df.columns.tolist() /// Would work with 12data, not with yfinance
+                self.tickers = self.df.columns.get_level_values(1).tolist()
+                print(f"Loaded data from {self.filename}")
+                return self.df
+            except Exception as e:
+                print(f"Error loading pickle file '{self.filename}': {e}")
 
-        return None
+        # If file not found, attempt to fetch new data
+        try:
+            self.get_stockex_tickers()
+            if not self.tickers:
+                print("No tickers found. Unable to retrieve data.")
+                return None  # Exit if no tickers are found
+
+            self.df = self.loaded_df()
+            if self.df is not None:
+                print("New data fetched and loaded successfully.")
+            else:
+                print("Failed to fetch new data.")
+
+            return self.df
+        except Exception as e:
+            print(f"Error retrieving data: {e}")
+            return None
 
 
     def get_stockex_tickers(self):
         """
         Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
-        Returns:
-            List[str]: List of ticker symbols extracted from the specified Wikipedia page.
+        Sets the `self.tickers` attribute with the extracted ticker symbols.
         """
-        tables = pd.read_html(self.link)
-        df = tables[4]
-        df.drop(['Company', 'GICS Sector', 'GICS Sub-Industry'],
-                axis=1, inplace=True)
-        tickers = df['Ticker'].values.tolist()
-        return tickers
+        try:
+            # Read all tables on the Wikipedia page
+            tables = pd.read_html(self.link)
+            print(f"Found {len(tables)} tables on the page.")
+
+            # Find the first table with at least one column and select only the first column
+            for table in tables:
+                self.tickers = table.loc[:, "Symbol"].dropna().tolist()  # Get the first column and drop any NaN values
+                print(f"Retrieved {len(self.tickers)} tickers from the first column of the table.")
+                return  # Exit after finding the first valid table
+
+            print("No valid table found with ticker symbols.")
+        except Exception as e:
+            print(f"Error retrieving tickers from {self.link}: {e}")
+            self.tickers = []  # Reset tickers if there's an error
     
     def fetch_twelve_data(self, start_date : datetime, end_date: datetime):
         """
@@ -172,19 +224,38 @@ class IndexData_Retrieval:
     
     def loaded_df(self):
         """
-        Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
-        Returns:
-            pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
-        """
-        if self.years is not None and self.months is None:
-            time_window_months = self.years * 12
-        elif self.months is not None and self.years is None:
-            time_window_months = self.months
-        else:
-            raise ValueError("Exactly one of 'years' or 'months' should be provided.")
+        Downloads historical stock price data for the specified time window and tickers using either the Twelve Data API
+        or yfinance, based on the preferred method.
 
-        end_date = datetime.now() - timedelta(days = 30)
+        Args:
+            use_yfinance (bool): If True, uses yfinance to download data instead of the Twelve Data API.
+
+        Returns:
+            pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
+        """
+        if (self.years is None) == (self.months is None):  # both or neither
+            raise ValueError("Specify exactly one of 'years' or 'months'.")
+
+        time_window_months = self.years * 12 if self.years else self.months
+        end_date = datetime.now() - timedelta(days = 30)  #why has this been set to 30 days?
         start_date = end_date - pd.DateOffset(months=time_window_months)
+
+        if not isinstance(self.yfinance, bool):
+            raise TypeError(f"Expected 'yfinance' to be a boolean, but got {type(self.yfinance).__name__}")
+
+        if self.yfinance:
+            # Using yfinance to download data
+            try:
+                data = yf.download(self.tickers, start=start_date_str, end=end_date_str, interval=self.frequency)
+                # Adjusting format if multiple tickers are used
+                if len(self.tickers) == 1:
+                    data.columns = [self.tickers[0]]  # Rename column if only one ticker is downloaded
+                return data
+            except Exception as e:
+                print(f"Error downloading data with yfinance: {e}")
+                return None
+
+        #Using 12 data
 
         stocks_df = self.fetch_twelve_data(start_date=start_date, end_date=end_date)
         PickleHelper(obj=stocks_df).pickle_dump(filename='nasdaq_dataframe')
@@ -192,31 +263,41 @@ class IndexData_Retrieval:
 
     def clean_df(self, percentage):
         """
-        Cleans the df by dropping stocks with NaN values exceeding the given percentage threshold.
-        The cleaned df is pickled after the operation.
+        Cleans the DataFrame by removing columns (tickers) with NaN values exceeding a specified threshold.
 
         Parameters:
-        self
+        ----------
         percentage : float
             Percentage threshold for NaN values. If greater than 1, it's interpreted as a percentage (e.g., 5 for 5%).
-        
+
         Returns:
-        None
+        -------
+        None: The method updates `self.df` with cleaned data, removing any columns with excessive NaNs.
         """
-        if percentage > 1:
-            percentage = percentage / 100
+        # Convert percentage if given as an integer greater than 1
+        threshold = percentage / 100 if percentage > 1 else percentage
 
-        #FIXME: this is not working, it's giving out an empty df
+        #Currently only working with yfinance (cannot test with 12data because of lack of API key)
+
+        # Drop tickers with NaN values exceeding the threshold
         for ticker in self.tickers:
-            nan_values = self.df[ticker].isnull().values.any()
-            if nan_values:
-                count_nan = self.df[ticker].isnull().sum()
-                if count_nan > (len(self.df) * percentage):
-                    self.df.drop(ticker, axis=1, inplace=True)
+            # Check if the ticker exists as a first-level column in the DataFrame
+            if ticker in self.df.columns.get_level_values(1):
+                # Calculate the percentage of NaN values for that ticker across all fields
+                if self.df.xs(ticker,axis=1,level=1).isna().sum().sum() > (len(self.df) * threshold):
+                    self.df.drop(columns=[ticker], level=1, inplace=True)
+            else:
+                print(f"Warning: Ticker '{ticker}' not found in DataFrame columns.")
 
-        self.df.fillna(method='ffill', inplace=True)
-        #FIXME: fml this doesn't work if i have consecutive days
-        PickleHelper(obj=self.df).pickle_dump(filename='cleaned_nasdaq_dataframe')
+        # Fill remaining NaN values using forward fill
+        self.df.ffill(inplace=True)
+
+        # Drop any remaining columns with NaN values /// If two consecutive days are NaN the entire column gets dropped. Don't know if this is a good
+        # approach in this case, depends on how common NaNs are.
+        self.df.dropna(axis=1, inplace=True)
+
+        # Save the cleaned DataFrame
+        PickleHelper(obj=self.df).pickle_dump(filename='cleaned_dataframe')
 
 class Timestamping:
     """
