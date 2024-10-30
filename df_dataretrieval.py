@@ -1,13 +1,16 @@
+import os
+import re
+import time
+from datetime import timedelta, datetime
 
 import numpy as np
-from datetime import timedelta, datetime
-import os
 import pandas as pd
-from twelvedata import TDClient
-import re
-from helpermodules.memory_handling import PickleHelper
+import yfinance as yf
 from dotenv import load_dotenv
-import time
+from memory_handling import PickleHelper
+from twelvedata import TDClient
+
+
 
 class IndexData_Retrieval:
     """
@@ -17,9 +20,9 @@ class IndexData_Retrieval:
         filename (str): Name of the pickle file to save or load data from.
         link (str): URL to a Wikipedia page with stock exchange ticker information.
         frequency (str): Frequency of the historical data (e.g., '1d', '1wk').
-        years (int, optional): Number of years of historical data to load.
-        months (int, optional): Number of months of historical data to load.
-        yfinance (bool, optional): Flag to determine if yfinance should be used for data retrieval (default: True).
+        years (int, optional): Number of years of historical data to load. Exclusive with 'months'.
+        months (int, optional): Number of months of historical data to load. Exclusive with 'years'.
+        yfinance (bool, optional): If True, use yfinance for data retrieval; otherwise, use the Twelve Data API.
 
     Methods:
         load():
@@ -53,7 +56,7 @@ class IndexData_Retrieval:
                 None: The method updates `self.dataframe` with cleaned data, removing any columns with excessive NaNs.
     """
 
-    def __init__(self, filename, link, frequency, years=None, months=None,yfinance=True):
+    def __init__(self, filename, link, frequency, years=None, months=None, yfinance=True):
         self.filename = filename
         self.link = link
         self.df = pd.DataFrame()
@@ -86,7 +89,7 @@ class IndexData_Retrieval:
         if os.path.isfile(file_path):
             try:
                 self.df = PickleHelper.pickle_load(self.filename).obj
-                #self.tickers = self.df.columns.tolist() /// Would work with 12data, not with yfinance
+                # self.tickers = self.df.columns.tolist() /// Would work with 12data, not with yfinance
                 self.tickers = self.df.columns.get_level_values(1).tolist()
                 print(f"Loaded data from {self.filename}")
                 return self.df
@@ -111,7 +114,6 @@ class IndexData_Retrieval:
             print(f"Error retrieving data: {e}")
             return None
 
-
     def get_stockex_tickers(self):
         """
         Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
@@ -132,8 +134,8 @@ class IndexData_Retrieval:
         except Exception as e:
             print(f"Error retrieving tickers from {self.link}: {e}")
             self.tickers = []  # Reset tickers if there's an error
-    
-    def fetch_twelve_data(self, start_date : datetime, end_date: datetime):
+
+    def fetch_twelve_data(self, start_date: datetime, end_date: datetime):
         """
         Fetches historical data for multiple tickers within a specified date range from the Twelve Data API and stores the results in a DataFrame.
         This function divides the date range into manageable batches, retrieves the data from the Twelve Data API, and handles rate limits by batching tickers and pausing between batches.
@@ -148,36 +150,38 @@ class IndexData_Retrieval:
 
         Returns:
         --------
-        pd.DataFrame
-            A DataFrame containing the historical data for all specified tickers.
+        None: The method updates `self.dataframe` with the fetched data.
         """
 
         load_dotenv()
         API_KEY = os.getenv('API_KEY')
+        if not API_KEY:
+            raise ValueError("API_KEY not found in environment variables.")
+
         td = TDClient(apikey=API_KEY)
-        #initializing the final df, setting columns to be name of tickers
-        dataframes = pd.DataFrame(np.nan, columns = self.tickers, index = [d for d in Timestamping(start_date, end_date)])
-        
-        #dividing the 5k batches and keeping track of the
+        # initializing the final df, setting columns to be name of tickers
+        dataframes = pd.DataFrame(np.nan, columns=self.tickers, index=[d for d in Timestamping(start_date, end_date)])
+
+        # dividing the 5k batches and keeping track of the
         generator = Timestamping(start_date=start_date, end_date=end_date)
         batchsize = 5000
         boundaries = []
         try:
             boundary_start = next(generator)
-            boundary_end = boundary_start 
-            while True: 
-                for _ in range(batchsize -1):
+            boundary_end = boundary_start
+            while True:
+                for _ in range(batchsize - 1):
                     try:
                         boundary_end = next(generator)
                     except StopIteration:
                         boundaries.append((boundary_start, boundary_end))
                         raise StopIteration
                 boundaries.append((boundary_start, boundary_end))
-                boundary_start = next(generator)   
+                boundary_start = next(generator)
         except StopIteration:
             pass
-        
-        #divide tickers into batches
+
+        # divide tickers into batches
         def divide_tickers_inbatches(tickers):
             """
             Divides the tickers list into batches of 55.
@@ -192,36 +196,36 @@ class IndexData_Retrieval:
             list
                 A list of ticker batches, each containing up to 55 tickers.
             """
-            return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
-        
+            return [tickers[i:i + 55] for i in range(0, len(tickers), 55)]
+
         ticker_batches = divide_tickers_inbatches(tickers=self.tickers)
-        
+
         for i, ticker_list in enumerate(ticker_batches):
-                print(f'Processing batch {i+1}/{len(ticker_batches)}')
-                for ticker in ticker_list:
-                
-                    for j, (call_start, call_end) in enumerate(boundaries):
-                        print(f'Fetching data for {ticker} - Call {j+1}/{len(boundaries)}')
-                        try:
-                            df = td.time_series(
-                                symbol=ticker,
-                                interval=self.frequency,
-                                start_date=call_start, 
-                                end_date=call_end,
-                                outputsize=batchsize,
-                                timezone="America/New_York",
-                            ).as_pandas()
-                            print(len(df))
-                            for index, value in df['close'].items(): 
-                                dataframes.loc[index, ticker] =  value
-                            
-                        except Exception as e:
-                            print(f"Error fetching data for {ticker} - Call {j+1}/{len(boundaries)}: {e}")
-                if len(ticker_batches) == 55: 
-                    print('Please wait 60 seconds.')
-                    time.sleep(60)
-        return dataframes
-    
+            print(f'Processing batch {i + 1}/{len(ticker_batches)}')
+            for ticker in ticker_list:
+
+                for j, (call_start, call_end) in enumerate(boundaries):
+                    print(f'Fetching data for {ticker} - Call {j + 1}/{len(boundaries)}')
+                    try:
+                        df = td.time_series(
+                            symbol=ticker,
+                            interval=self.frequency,
+                            start_date=call_start,
+                            end_date=call_end,
+                            outputsize=batchsize,
+                            timezone="America/New_York",
+                        ).as_pandas()
+                        print(len(df))
+                        for index, value in df['close'].items():
+                            dataframes.loc[index, ticker] = value
+
+                    except Exception as e:
+                        print(f"Error fetching data for {ticker} - Call {j + 1}/{len(boundaries)}: {e}")
+            if len(ticker_batches) == 55:
+                print('Please wait 60 seconds.')
+                time.sleep(60)
+        self.df = dataframes
+
     def loaded_df(self):
         """
         Downloads historical stock price data for the specified time window and tickers using either the Twelve Data API
@@ -237,8 +241,9 @@ class IndexData_Retrieval:
             raise ValueError("Specify exactly one of 'years' or 'months'.")
 
         time_window_months = self.years * 12 if self.years else self.months
-        end_date = datetime.now() - timedelta(days = 30)  #why has this been set to 30 days?
+        end_date = datetime.now() - timedelta(days=30)  # why has this been set to 30 days?
         start_date = end_date - pd.DateOffset(months=time_window_months)
+        start_date_str, end_date_str = start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
         if not isinstance(self.yfinance, bool):
             raise TypeError(f"Expected 'yfinance' to be a boolean, but got {type(self.yfinance).__name__}")
@@ -250,16 +255,14 @@ class IndexData_Retrieval:
                 # Adjusting format if multiple tickers are used
                 if len(self.tickers) == 1:
                     data.columns = [self.tickers[0]]  # Rename column if only one ticker is downloaded
-                return data
+                self.df = data
             except Exception as e:
                 print(f"Error downloading data with yfinance: {e}")
-                return None
 
-        #Using 12 data
+        # Using Twelve Data API
 
-        stocks_df = self.fetch_twelve_data(start_date=start_date, end_date=end_date)
-        PickleHelper(obj=stocks_df).pickle_dump(filename='nasdaq_dataframe')
-        return stocks_df
+        self.df = self.fetch_twelve_data(start_date=start_date, end_date=end_date)
+        PickleHelper(obj=self.df).pickle_dump(filename='nasdaq_dataframe')
 
     def clean_df(self, percentage):
         """
@@ -277,14 +280,14 @@ class IndexData_Retrieval:
         # Convert percentage if given as an integer greater than 1
         threshold = percentage / 100 if percentage > 1 else percentage
 
-        #Currently only working with yfinance (cannot test with 12data because of lack of API key)
+        # Currently only working with yfinance (cannot test with 12data because of lack of API key)
 
         # Drop tickers with NaN values exceeding the threshold
         for ticker in self.tickers:
             # Check if the ticker exists as a first-level column in the DataFrame
             if ticker in self.df.columns.get_level_values(1):
                 # Calculate the percentage of NaN values for that ticker across all fields
-                if self.df.xs(ticker,axis=1,level=1).isna().sum().sum() > (len(self.df) * threshold):
+                if self.df.xs(ticker, axis=1, level=1).isna().sum().sum() > (len(self.df) * threshold):
                     self.df.drop(columns=[ticker], level=1, inplace=True)
             else:
                 print(f"Warning: Ticker '{ticker}' not found in DataFrame columns.")
@@ -298,6 +301,7 @@ class IndexData_Retrieval:
 
         # Save the cleaned DataFrame
         PickleHelper(obj=self.df).pickle_dump(filename='cleaned_dataframe')
+
 
 class Timestamping:
     """
@@ -323,6 +327,7 @@ class Timestamping:
     __next__() -> datetime:
         Returns the next timestamp in the sequence.
     """
+
     def __init__(self, start_date: datetime, end_date: datetime, frequency_minutes=1):
         """
         Initializes the Timestamping class with start date, end date, and frequency in minutes.
@@ -336,16 +341,16 @@ class Timestamping:
         frequency_minutes : int, optional
             The frequency in minutes for generating timestamps. Default is 1 minute.
         """
-        #define market trading hours (from 9:45 to 15:15, considering Simone's hypothesis)
+        # define market trading hours (from 9:45 to 15:15, considering Simone's hypothesis)
         self.market_open_hour = 9
         self.market_open_minute = 45
         self.market_close_hour = 15
         self.market_close_minute = 15
-        #initial assumption: unless stated, starts at the start of the trading day  
-        self.current = start_date.replace(hour= self.market_open_hour ,minute=self.market_open_minute -1, second=0, microsecond=0)
+        # initial assumption: unless stated, starts at the start of the trading day
+        self.current = start_date.replace(hour=self.market_open_hour, minute=self.market_open_minute - 1, second=0,
+                                          microsecond=0)
         self.end = end_date
         self.frequency = frequency_minutes
-
 
     def __iter__(self):
         return self
@@ -367,7 +372,7 @@ class Timestamping:
         datetime
             The next timestamp in the sequence.
         """
-        #Increment current to the next stop:
+        # Increment current to the next stop:
         # - Add 1 minute (later we'll add the frequency here)
         self.current += timedelta(minutes=1)
         # if it's end of day:
@@ -386,4 +391,3 @@ class Timestamping:
             raise StopIteration
 
         return self.current
-
