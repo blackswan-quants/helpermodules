@@ -54,6 +54,8 @@ class IndexData_Retrieval:
 
             Returns:
                 None: The method updates `self.dataframe` with cleaned data, removing any columns with excessive NaNs.
+        HINT : To access self.df use df.xs("{ticker}", axis= 1, level=1)["Adj Close"]. In this case
+        it extracts Adj Close data for the ticker in a timeseries format.
     """
 
     def __init__(self, filename, link, frequency, years=None, months=None, yfinance=True):
@@ -300,7 +302,7 @@ class IndexData_Retrieval:
         self.df.dropna(axis=1, inplace=True)
 
         # Save the cleaned DataFrame
-        PickleHelper(obj=self.df).pickle_dump(filename='cleaned_dataframe')
+        PickleHelper(obj=self.df).pickle_dump(filename=self.filename)
 
 
 class Timestamping:
