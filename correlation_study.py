@@ -121,8 +121,8 @@ class CorrelationAnalysis:
     
         coint_value = np.zeros((len(self.tickers), len(self.tickers)))
 
-        for i in range(n_tickers):
-            for j in range(n_tickers):
+        for i in range(len(self.tickers)):
+            for j in range(len(self.tickers)):
                 if i != j:  
                     if use_pct_change:
                         vals_i = self.dataframe[self.tickers[i]].pct_change().dropna().to_numpy()
@@ -170,8 +170,8 @@ class CorrelationAnalysis:
         for i in range(len(tmp_arr)):
             tmp_arr[i, i] = 0
         max_corr = np.nanmax(tmp_arr)
-        max_indexes = np.where(tmp_arr == max_corr) # put tmp_arr instead of self.corrvalues
-        # max_pair = [self.tickers[max_indexes[0][0]], self.tickers[max_indexes[0][1]]]
+        max_indexes = np.where(self.corrvalues == max_corr)
+        #max_pair = [self.tickers[max_indexes[0][0]], self.tickers[max_indexes[0][1]]]
 
         corr_order = np.argsort(tmp_arr.flatten())
         corr_num = corr_order[-1]
@@ -234,3 +234,19 @@ class CorrelationAnalysis:
         seaborn.heatmap(pd.DataFrame(self.best_lag, columns=self.tickers, index=self.tickers), annot=True, cmap=cmap)
         plt.show()
 
+    def plot_coint_matrix(self):
+        """
+        Plot the cointegration matrix heatmap for the given DataFrame.
+        
+        Returns:
+            None
+        """
+        norm = matplotlib.colors.Normalize(-1, 1)
+        colors = [[norm(-1), "red"],
+                  [norm(-0.93), "lightgrey"],
+                  [norm(0.93), "lightgrey"],
+                  [norm(1), "green"]]
+        cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", colors)
+        plt.figure(figsize=(40, 20))
+        seaborn.heatmap(pd.DataFrame(self.coint_scores, columns=self.tickers, index=self.tickers), annot=True, cmap=cmap)
+        plt.show()
