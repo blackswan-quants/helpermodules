@@ -8,6 +8,7 @@ import seaborn
 import matplotlib.colors
 import scipy.stats as ss
 from scipy import signal
+from statsmodels.tsa.vector_ar.vecm import coint
 from datetime import timedelta, datetime
 
 from sklearn.preprocessing import MinMaxScaler
@@ -46,9 +47,12 @@ class CorrelationAnalysis:
    #     self.pvalues = None
     #    self.winner = None
 
-    def get_correlated_stocks(self):
+    def get_correlated_stocks(self, use_pct_change=True):
         """
         Calculate correlation coefficients and p-values for the given stocks within a given time period.
+        
+        Parameters:
+            use_pct_change (bool): If True, use percentage change instead of raw values.
         
         Returns:
             None
@@ -57,8 +61,14 @@ class CorrelationAnalysis:
         pvalue_array = np.zeros([len(self.tickers), len(self.tickers)])
         for i in range(len(self.tickers)):
             for j in range(len(self.tickers)):
-                vals_i = self.dataframe[self.tickers[i]].to_numpy()
-                vals_j = self.dataframe[self.tickers[j]].to_numpy()
+                if use_pct_change:
+                    # Calculate percentage change
+                    vals_i = self.dataframe[self.tickers[i]].pct_change().dropna().to_numpy()
+                    vals_j = self.dataframe[self.tickers[j]].pct_change().dropna().to_numpy()
+                else:
+                    # Use original values
+                    vals_i = self.dataframe[self.tickers[i]].to_numpy()
+                    vals_j = self.dataframe[self.tickers[j]].to_numpy()
                 r_ij, p_ij = ss.stats.pearsonr(vals_i, vals_j)
                 corr_values[i, j] = r_ij
                 pvalue_array[i, j] = p_ij
@@ -67,6 +77,68 @@ class CorrelationAnalysis:
         self.pvalues = pvalue_array
         PickleHelper(self.corrvalues).pickle_dump('correlationvalues_array')
         PickleHelper(self.pvalues).pickle_dump('pvalues_array')
+
+    def get_correlation_lags(self, use_pct_change=True):
+        """
+        Calculate and store cross-correlation lags as vectors in a 3D array for each stock pair (i, j).
+        Store the best lag for each correlation in the best_lag 2D array.
+        
+        Parameters:
+            use_pct_change (bool): If True, use percentage change instead of raw values.
+
+        Returns:
+            None
+        """
+        corr_lags = np.zeros([len(self.tickers), len(self.tickers), self.dataframe.shape[0]*2-1])
+        best_lag = np.zeros([len(self.tickers), len(self.tickers)])
+        for i in range(len(self.tickers)):
+            for j in range(len(self.tickers)):
+                if use_pct_change:
+                    vals_i = self.dataframe[self.tickers[i]].pct_change().dropna().to_numpy()
+                    vals_j = self.dataframe[self.tickers[j]].pct_change().dropna().to_numpy()
+                else:
+                    vals_i = self.dataframe[self.tickers[i]].to_numpy()
+                    vals_j = self.dataframe[self.tickers[j]].to_numpy()
+                lags_ij = signal.correlation_lags(len(vals_i), len(vals_j), mode="full")
+                corr_lags[i, j] = lags_ij
+                correlation = signal.correlate(vals_i, vals_j, mode="full")
+                best_lag[i, j] = lags_ij[np.argmax(correlation)]
+        self.best_lag = best_lag
+        self.corr_lags = corr_lags
+        PickleHelper(self.corr_lags).pickle_dump('all_lags_array')
+        PickleHelper(self.best_lag).pickle_dump('best_lags_array')
+
+    def cointegration_study(self, use_pct_change=False):
+        """
+        Perform the cointegration study for the matrix given.
+    
+        Parameters:
+            use_pct_change (bool): If True, use percentage change instead of raw values.
+        
+        Returns:
+            None
+        """
+    
+        coint_value = np.zeros((len(self.tickers), len(self.tickers)))
+
+        for i in range(n_tickers):
+            for j in range(n_tickers):
+                if i != j:  
+                    if use_pct_change:
+                        vals_i = self.dataframe[self.tickers[i]].pct_change().dropna().to_numpy()
+                        vals_j = self.dataframe[self.tickers[j]].pct_change().dropna().to_numpy()
+                    else:
+                        vals_i = self.dataframe[self.tickers[i]].to_numpy()
+                        vals_j = self.dataframe[self.tickers[j]].to_numpy()
+
+                    # Perform the cointegration test
+                    values, _, _ = coint(vals_i, vals_j) # we only get the t-statistic of unit-root test on residual and not the rest
+                
+                    # Store the results
+                    coint_value[i, j] = values
+
+        self.coint_scores = coint_value
+        PickleHelper(self.coint_scores).pickle_dump('cointegration_values_array')
 
     def plot_corr_matrix(self):
         """
@@ -141,3 +213,24 @@ class CorrelationAnalysis:
                             print(f"{concat_dataframe.columns[i]} and {concat_dataframe.columns[j]} are correlated ({corr_matrix.iloc[i, j]}, shift = {shift})")
 
             print('\n')
+
+    def plot_stocks(self):
+        self.dataframe.plot(subplots=True); # prints the price off all the stocks in the dataframe 
+
+    def plot_lag_matrix(self):
+        """
+        Plot the correlation matrix heatmap for the given DataFrame.
+        
+        Returns:
+            None
+        """
+        norm = matplotlib.colors.Normalize(-1, 1)
+        colors = [[norm(-1), "red"],
+                  [norm(-0.93), "lightgrey"],
+                  [norm(0.93), "lightgrey"],
+                  [norm(1), "green"]]
+        cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", colors)
+        plt.figure(figsize=(40, 20))
+        seaborn.heatmap(pd.DataFrame(self.best_lag, columns=self.tickers, index=self.tickers), annot=True, cmap=cmap)
+        plt.show()
+
