@@ -8,7 +8,7 @@ import seaborn
 import matplotlib.colors
 import scipy.stats as ss
 from scipy import signal
-from statsmodels.tsa.vector_ar.vecm import coint
+from statsmodels.tsa.vector_ar.vecm import coint # import from statsmodels.tsa.stattools if it doesn't work
 from datetime import timedelta, datetime
 
 from sklearn.preprocessing import MinMaxScaler
@@ -47,7 +47,7 @@ class CorrelationAnalysis:
    #     self.pvalues = None
     #    self.winner = None
 
-    def get_correlated_stocks(self, use_pct_change=True):
+    def get_correlated_stocks(self, use_pct_change=False):
         """
         Calculate correlation coefficients and p-values for the given stocks within a given time period.
         
@@ -78,7 +78,7 @@ class CorrelationAnalysis:
         PickleHelper(self.corrvalues).pickle_dump('correlationvalues_array')
         PickleHelper(self.pvalues).pickle_dump('pvalues_array')
 
-    def get_correlation_lags(self, use_pct_change=True):
+    def get_correlation_lags(self, use_pct_change=False):
         """
         Calculate and store cross-correlation lags as vectors in a 3D array for each stock pair (i, j).
         Store the best lag for each correlation in the best_lag 2D array.
@@ -165,14 +165,14 @@ class CorrelationAnalysis:
             None
         """
         corr_values_filtered = np.where(self.pvalues > 0.05, self.corrvalues, np.nan)
-        min_corr = np.nanmin(corr_values_filtered)
+        #min_corr = np.nanmin(corr_values_filtered)
         tmp_arr = corr_values_filtered.copy()
         for i in range(len(tmp_arr)):
             tmp_arr[i, i] = 0
-        max_corr = np.nanmax(tmp_arr)
-        max_indexes = np.where(self.corrvalues == max_corr)
+        #max_corr = np.nanmax(tmp_arr)
+        #max_indexes = np.where(self.corrvalues == max_corr)
         #max_pair = [self.tickers[max_indexes[0][0]], self.tickers[max_indexes[0][1]]]
-
+        # I commented all the things above because they aren't saved
         corr_order = np.argsort(tmp_arr.flatten())
         corr_num = corr_order[-1]
         max_pair = [self.tickers[corr_num // len(self.tickers)], self.tickers[corr_num % len(self.tickers)]]
