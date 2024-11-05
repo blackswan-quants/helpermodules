@@ -41,8 +41,7 @@ class IndexData_Retrieval:
             Returns:
                 pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
     """
-
-    def __init__(self, filename, link, frequency, years=None, months=None):
+    def __init__(self, filename, link, frequency, years=None, months=None, use_yfinance=False):
         self.filename = filename
         self.link = link
         self.df = pd.DataFrame()
@@ -50,6 +49,7 @@ class IndexData_Retrieval:
         self.tickers = []
         self.years = years
         self.months = months
+        self.use_yfinance = use_yfinance
 
     def getdata(self):
         """
@@ -70,8 +70,7 @@ class IndexData_Retrieval:
             self.df = self.loaded_df()
 
         return None
-
-
+    
     def get_stockex_tickers(self):
         """
         Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
@@ -142,6 +141,7 @@ class IndexData_Retrieval:
                 end=end_date.strftime('%Y-%m-%d'),
                 interval=self.frequency,
                 group_by='ticker',
+                auto_adjust=False,  # Set to False to get all available data including 'Adj Close'
                 prepost=False,
                 threads=True,
                 proxy=None
@@ -232,31 +232,30 @@ class IndexData_Retrieval:
                     print('Please wait 60 seconds.')
                     time.sleep(60)
             return dataframes
-      
+
     def loaded_df(self):
         """
-        Downloads historical stock price data for the specified time window and tickers using yfinance.
+        Downloads historical stock price data for the specified time window and tickers using the selected data source.
         Returns:
-            pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
+            pandas.DataFrame or None: DataFrame containing downloaded stock price data if successful, otherwise None.
         """
         if self.years is not None and self.months is None:
             time_window_months = self.years * 12
         elif self.months is not None and self.years is None:
             time_window_months = self.months
         else:
-            raise ValueError(
-                "Exactly one of 'years' or 'months' should be provided.")
+            raise ValueError("Exactly one of 'years' or 'months' should be provided.")
 
         end_date = datetime.now() - timedelta(days=30)
         start_date = end_date - pd.DateOffset(months=time_window_months)
 
-        stocks_df = self.fetch_yahoo_data(
-            start_date=start_date, end_date=end_date)
+        # Decide whether to use yfinance or Twelve Data API
+        stocks_df = self.fetch_data(start_date=start_date, end_date=end_date, use_yfinance=self.use_yfinance)
         if stocks_df is not None:
             PickleHelper(obj=stocks_df).pickle_dump(filename='nasdaq_dataframe')
             return stocks_df
         else:
-            print("Impossible to get datas.")
+            print("Unable to retrieve data.")
             return None
 
     def clean_df(self, percentage):
