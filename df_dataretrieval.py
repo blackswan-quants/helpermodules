@@ -4,6 +4,7 @@ from datetime import timedelta, datetime
 import os
 import pandas as pd
 from twelvedata import TDClient
+import yfinance as yf # import yfinance 
 import re
 from helpermodules.memory_handling import PickleHelper
 from dotenv import load_dotenv
@@ -11,7 +12,7 @@ import time
 
 class IndexData_Retrieval:
     """
-    A class for downloading and processing historical stock price data using the Twelve Data API.
+    A class for downloading and processing historical stock price data using yfinance.
 
     Parameters:
         filename (str): Name of the pickle file to save or load df.
@@ -31,9 +32,12 @@ class IndexData_Retrieval:
             Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
             Returns:
                 List[str]: List of ticker symbols extracted from the specified Wikipedia page.
+        
+        fetch_yahoo_dat():
+
 
         loaded_df():
-            Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
+            Downloads historical stock price data for the specified time window and tickers using yfinance.
             Returns:
                 pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
     """
@@ -81,98 +85,87 @@ class IndexData_Retrieval:
         tickers = df['Ticker'].values.tolist()
         return tickers
     
-    def fetch_twelve_data(self, start_date : datetime, end_date: datetime):
+    # MODIFIED BY USING YFINANCE INSTEAD OF YFINANCE
+    
+    def fetch_yahoo_data(self, start_date : datetime, end_date: datetime): 
         """
-        Fetches historical data for multiple tickers within a specified date range from the Twelve Data API and stores the results in a DataFrame.
-        This function divides the date range into manageable batches, retrieves the data from the Twelve Data API, and handles rate limits by batching tickers and pausing between batches.
-        The data retrieval follows New York trading hours (9:45 AM to 3:15 PM EST).
+        Fetches historical data for multiple tickers within a specified date range from Yahoo Finance and stores the results in a DataFrame.
+        This method handles Yahoo Finance's limitations on data intervals and historical periods, adjusting the start date if necessary.
+        retrieves adjusted closing prices for the specified tickers and frequency.
 
         Parameters:
         -----------
         start_date : datetime
             The start date for fetching data.
         end_date : datetime
-            The end date for fetching data.
+             end date for fetching data.
 
         Returns:
         --------
         pd.DataFrame
-            A DataFrame containing the historical data for all specified tickers.
+            A DataFrame containing the historical adjusted closing prices for all specified tickers.
         """
+        # Since Yahoo Finance has limitations on some frequency intervals and historical periods, 
+        # we have added a validations to make sure the parameters are ok.
 
-        load_dotenv()
-        API_KEY = os.getenv('API_KEY')
-        td = TDClient(apikey=API_KEY)
-        #initializing the final df, setting columns to be name of tickers
-        dataframes = pd.DataFrame(np.nan, columns = self.tickers, index = [d for d in Timestamping(start_date, end_date)])
-        
-        #dividing the 5k batches and keeping track of the
-        generator = Timestamping(start_date=start_date, end_date=end_date)
-        batchsize = 5000
-        boundaries = []
-        try:
-            boundary_start = next(generator)
-            boundary_end = boundary_start 
-            while True: 
-                for _ in range(batchsize -1):
-                    try:
-                        boundary_end = next(generator)
-                    except StopIteration:
-                        boundaries.append((boundary_start, boundary_end))
-                        raise StopIteration
-                boundaries.append((boundary_start, boundary_end))
-                boundary_start = next(generator)   
-        except StopIteration:
-            pass
-        
-        #divide tickers into batches
-        def divide_tickers_inbatches(tickers):
-            """
-            Divides the tickers list into batches of 55.
+        # Valid interval of frequencies
+        valid_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m',
+                           '1h', '1d', '5d', '1wk', '1mo', '3mo']
+        if self.frequency not in valid_intervals:
+            raise ValueError(
+                f"Frequency not valid '{self.frequency}'. Valid frequencies are: {valid_intervals}")
 
-            Parameters:
-            -----------
-            tickers : list
-                The list of ticker symbols to be divided.
+        # Limitations for intraday datas
+        max_periods = {
+            '1m': timedelta(days=7),
+            '2m': timedelta(days=60),
+            '5m': timedelta(days=60),
+            '15m': timedelta(days=60),
+            '30m': timedelta(days=60),
+            '60m': timedelta(days=730),
+            '90m': timedelta(days=730),
+            '1h': timedelta(days=730),
+        }
 
-            Returns:
-            --------
-            list
-                A list of ticker batches, each containing up to 55 tickers.
-            """
-            return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
+        intraday_intervals = ['1m', '2m', '5m', '15m',
+                              '30m', '60m', '90m', '1h']
+        if self.frequency in intraday_intervals:
+            max_period = max_periods.get(
+                self.frequency, timedelta(days=60))
+            if end_date - start_date > max_period:
+                start_date = end_date - max_period
+                print(
+                    f"Start date set at {start_date.strftime('%Y-%m-%d')} due to limitations for the interval '{self.frequency}'.")
+
+        data = yf.download(
+            tickers=self.tickers,
+            start=start_date.strftime('%Y-%m-%d'),
+            end=end_date.strftime('%Y-%m-%d'),
+            interval=self.frequency,
+            group_by='ticker',
+            auto_adjust=True,
+            prepost=False,
+            threads=True,
+            proxy=None
+        )
+
+        if data.empty:
+            print("No data taken by Yahoo Finance. Check the tickets and the date interval.")
+            return None
+
+        if len(self.tickers) == 1:
+            # Just one ticker
+            df_close = data[['Close']].rename(
+                columns={'Close': self.tickers[0]})
+        else:
+            # More tickers
+            df_close = data['Close']
+
+        return df_close
         
-        ticker_batches = divide_tickers_inbatches(tickers=self.tickers)
-        
-        for i, ticker_list in enumerate(ticker_batches):
-                print(f'Processing batch {i+1}/{len(ticker_batches)}')
-                for ticker in ticker_list:
-                
-                    for j, (call_start, call_end) in enumerate(boundaries):
-                        print(f'Fetching data for {ticker} - Call {j+1}/{len(boundaries)}')
-                        try:
-                            df = td.time_series(
-                                symbol=ticker,
-                                interval=self.frequency,
-                                start_date=call_start, 
-                                end_date=call_end,
-                                outputsize=batchsize,
-                                timezone="America/New_York",
-                            ).as_pandas()
-                            print(len(df))
-                            for index, value in df['close'].items(): 
-                                dataframes.loc[index, ticker] =  value
-                            
-                        except Exception as e:
-                            print(f"Error fetching data for {ticker} - Call {j+1}/{len(boundaries)}: {e}")
-                if len(ticker_batches) == 55: 
-                    print('Please wait 60 seconds.')
-                    time.sleep(60)
-        return dataframes
-    
     def loaded_df(self):
         """
-        Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
+        Downloads historical stock price data for the specified time window and tickers using yfinance.
         Returns:
             pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
         """
@@ -181,14 +174,20 @@ class IndexData_Retrieval:
         elif self.months is not None and self.years is None:
             time_window_months = self.months
         else:
-            raise ValueError("Exactly one of 'years' or 'months' should be provided.")
+            raise ValueError(
+                "Exactly one of 'years' or 'months' should be provided.")
 
-        end_date = datetime.now() - timedelta(days = 30)
+        end_date = datetime.now() - timedelta(days=30)
         start_date = end_date - pd.DateOffset(months=time_window_months)
 
-        stocks_df = self.fetch_twelve_data(start_date=start_date, end_date=end_date)
-        PickleHelper(obj=stocks_df).pickle_dump(filename='nasdaq_dataframe')
-        return stocks_df
+        stocks_df = self.fetch_yahoo_data(
+            start_date=start_date, end_date=end_date)
+        if stocks_df is not None:
+            PickleHelper(obj=stocks_df).pickle_dump(filename='nasdaq_dataframe')
+            return stocks_df
+        else:
+            print("Impossible to get datas.")
+            return None
 
     def clean_df(self, percentage):
         """
