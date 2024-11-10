@@ -3,6 +3,8 @@
      https://github.com/mrosol/Nonlincausality/blob/master/README.md
 """
 import pandas as pd
+import numpy as np
+from memory_handling import PickleHelper
 from nonlincausality import nonlincausalityNN as nlc_nn
 
 class NonlinearNNGrangerCausalityAnalysis:
@@ -25,6 +27,9 @@ class NonlinearNNGrangerCausalityAnalysis:
             nn_neurons (list): List specifying the number of neurons in each layer and dropout rate.
                 - The format: [neurons, dropout_rate, neurons, dropout_rate, ...]
         """
+        # Validate that the DataFrame has columns
+        if dataframe.empty or dataframe.columns.empty:
+            raise ValueError("DataFrame must have at least one column representing tickers.")
         # Store the dataframe with stock data
         self.dataframe = dataframe
         # Extract the column names (tickers) from the DataFrame
@@ -56,7 +61,14 @@ class NonlinearNNGrangerCausalityAnalysis:
         # Iterate over all pairs of tickers
         for i, ticker_x in enumerate(self.tickers):
             for j, ticker_y in enumerate(self.tickers):
-                if i != j:  # Skip if the tickers are the same
+
+                if i == j:
+                    # If testing the same ticker, set NaNs
+                    self.results[(ticker_x, ticker_y)] = {
+                    "p_values": np.nan,
+                    "f_statistics": np.nan
+                    }
+                else:  # Skip if the tickers are the same
                     # Prepare data for the analysis: Extract the time series of stock prices for both tickers
                     data_x = self.dataframe[ticker_x].dropna().values.reshape(-1, 1)  # Reshape for model input
                     data_y = self.dataframe[ticker_y].dropna().values.reshape(-1, 1)
@@ -64,7 +76,6 @@ class NonlinearNNGrangerCausalityAnalysis:
                     # Split data into training and validation sets (70% training, 30% validation)
                     train_size = int(0.7 * len(data_x))  # 70% for training
                     data_train, data_val = data_x[:train_size], data_x[train_size:]
-                    
                     # Perform the nonlinear Granger causality test using the nonlincausalityNN method
                     result = nlc_nn(
                         x=data_train,  # Training data for ticker_x
@@ -106,5 +117,5 @@ class NonlinearNNGrangerCausalityAnalysis:
             if result['p_value'] < alpha:  # Check if the p-value is less than the significance threshold
                 significant_pairs.append((ticker_x, ticker_y))
                 print(f"{ticker_x} nonlinearly causes {ticker_y} with p-value {result['p_value']}")
-        
+        PickleHelper(significant_pairs).pickle_dump('Non_Linear_Granger_Casuality_Significants')
         return significant_pairs
