@@ -32,10 +32,21 @@ class IndexData_Retrieval:
             Returns:
                 List[str]: List of ticker symbols extracted from the specified Wikipedia page.
 
-        loaded_df():
-            Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
+        fetch_twelve_data(start_date , end_date, frequency):
+            Download historical stock prices for the specified time window given a specific frequency
             Returns:
                 pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
+
+        loaded_df():
+            Downloads historical stock price data for the specified time window up to the current date and tickers using the Twelve Data API.
+            Returns:
+                pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
+
+        clean_df(percentage):
+            Cleans the df by dropping stocks with NaN values exceeding the given percentage threshold.
+            The cleaned df is pickled after the operation.
+            Returns:
+                None
     """
 
     def __init__(self, filename, link, frequency, years=None, months=None):
@@ -81,9 +92,9 @@ class IndexData_Retrieval:
         tickers = df['Ticker'].values.tolist()
         return tickers
     
-    def fetch_twelve_data(self, start_date : datetime, end_date: datetime):
+    def fetch_twelve_data(self, start_date : datetime, end_date: datetime, frequency=1):
         """
-        Fetches historical data for multiple tickers within a specified date range from the Twelve Data API and stores the results in a DataFrame.
+        Fetches historical data for multiple tickers within a specified date range and a specified frequency from the Twelve Data API and stores the results in a DataFrame.
         This function divides the date range into manageable batches, retrieves the data from the Twelve Data API, and handles rate limits by batching tickers and pausing between batches.
         The data retrieval follows New York trading hours (9:45 AM to 3:15 PM EST).
 
@@ -93,6 +104,8 @@ class IndexData_Retrieval:
             The start date for fetching data.
         end_date : datetime
             The end date for fetching data.
+        frequency : str
+            The frequency we want our datas to be fetched. (DEFAULT set as 1min)
 
         Returns:
         --------
@@ -104,12 +117,16 @@ class IndexData_Retrieval:
         API_KEY = os.getenv('API_KEY')
         td = TDClient(apikey=API_KEY)
         #initializing the final df, setting columns to be name of tickers
-        dataframes = pd.DataFrame(np.nan, columns = self.tickers, index = [d for d in Timestamping(start_date, end_date)])
+        dataframes = pd.DataFrame(np.nan, columns = self.tickers, index = [d for d in Timestamping(start_date, end_date, frequency)])
         
-        #dividing the 5k batches and keeping track of the
-        generator = Timestamping(start_date=start_date, end_date=end_date)
+        #create the object timestamping with the chosen start and end date and the frequency
+        generator = Timestamping(start_date=start_date, end_date=end_date, frequency_minutes=frequency)
         batchsize = 5000
         boundaries = []
+
+        #here it iterates through the whole timedelta, creating a list of boundaries for the chosen start and end
+        #date and the given frequency 
+
         try:
             boundary_start = next(generator)
             boundary_end = boundary_start 
@@ -144,27 +161,50 @@ class IndexData_Retrieval:
         
         ticker_batches = divide_tickers_inbatches(tickers=self.tickers)
         
+        #here it iterates first over the list of tickers, then ticker by ticker
+
         for i, ticker_list in enumerate(ticker_batches):
                 print(f'Processing batch {i+1}/{len(ticker_batches)}')
                 for ticker in ticker_list:
-                
-                    for j, (call_start, call_end) in enumerate(boundaries):
-                        print(f'Fetching data for {ticker} - Call {j+1}/{len(boundaries)}')
+
+                    #check whether the length of the time batches is less than 5000
+                    #if so, it just make the API call once, as it can handle up to 5k datas per call
+                    #otherwise, it iterates through the 5k-long time batches obtained previously
+
+                    if len(boundaries)<5000:
+
                         try:
-                            df = td.time_series(
+                            df=td.time_series(
                                 symbol=ticker,
-                                interval=self.frequency,
-                                start_date=call_start, 
-                                end_date=call_end,
-                                outputsize=batchsize,
+                                interval=f"{self.frequency}m",
+                                start_date=generator.start,
+                                end_date=generator.end,
+                                #outputsize=batchsize,
                                 timezone="America/New_York",
                             ).as_pandas()
-                            print(len(df))
                             for index, value in df['close'].items(): 
-                                dataframes.loc[index, ticker] =  value
-                            
+                                        dataframes.loc[index, ticker] =  value
                         except Exception as e:
-                            print(f"Error fetching data for {ticker} - Call {j+1}/{len(boundaries)}: {e}")
+                                print(f"Error fetching data for {ticker} - Call {j+1}/{len(boundaries)}: {e}")
+
+                    else:
+                        for j, (call_start, call_end) in enumerate(boundaries):
+                            print(f'Fetching data for {ticker} - Call {j+1}/{len(boundaries)}')
+                            try:
+                                df = td.time_series(
+                                    symbol=ticker,
+                                    interval=f"{self.frequency}m",
+                                    start_date=call_start, 
+                                    end_date=call_end,
+                                    outputsize=batchsize,
+                                    timezone="America/New_York",
+                                ).as_pandas()
+                                print(len(df))
+                                for index, value in df['close'].items(): 
+                                    dataframes.loc[index, ticker] =  value
+                                
+                            except Exception as e:
+                                print(f"Error fetching data for {ticker} - Call {j+1}/{len(boundaries)}: {e}")
                 if len(ticker_batches) == 55: 
                     print('Please wait 60 seconds.')
                     time.sleep(60)
@@ -172,7 +212,7 @@ class IndexData_Retrieval:
     
     def loaded_df(self):
         """
-        Downloads historical stock price data for the specified time window and tickers using the Twelve Data API.
+        Downloads historical stock price data for the specified time window up to the current date and tickers using the Twelve Data API.
         Returns:
             pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
         """
@@ -241,6 +281,7 @@ class Timestamping:
         Returns the iterator object itself.
     __next__() -> datetime:
         Returns the next timestamp in the sequence.
+
     """
     def __init__(self, start_date: datetime, end_date: datetime, frequency_minutes=1):
         """
@@ -261,13 +302,17 @@ class Timestamping:
         self.market_close_hour = 15
         self.market_close_minute = 15
         #initial assumption: unless stated, starts at the start of the trading day  
-        self.current = start_date.replace(hour= self.market_open_hour ,minute=self.market_open_minute -1, second=0, microsecond=0)
-        self.end = end_date
+        self.start= start_date.replace(hour= self.market_open_hour ,minute=self.market_open_minute -1, second=0, microsecond=0)
+        self.current = self.start
+        self.end = end_date.replace(hour= self.market_open_hour ,minute=self.market_open_minute -1, second=0, microsecond=0)
         self.frequency = frequency_minutes
+        
 
-
+        
     def __iter__(self):
         return self
+    
+        
 
     def __next__(self) -> datetime:
         """
@@ -287,8 +332,8 @@ class Timestamping:
             The next timestamp in the sequence.
         """
         #Increment current to the next stop:
-        # - Add 1 minute (later we'll add the frequency here)
-        self.current += timedelta(minutes=1)
+        minutes = self.frequency
+        self.current += timedelta(minutes=minutes)
         # if it's end of day:
         #   - Add 1 day
         if self.current.minute > self.market_close_minute and self.current.hour >= self.market_close_hour:
