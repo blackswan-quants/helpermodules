@@ -1,4 +1,3 @@
-
 import numpy as np
 from datetime import timedelta, datetime
 import os
@@ -9,6 +8,7 @@ import re
 from helpermodules.memory_handling import PickleHelper
 from dotenv import load_dotenv
 import time
+from pytickersymbols import PyTickerSymbols
 
 class IndexData_Retrieval:
     """
@@ -16,7 +16,7 @@ class IndexData_Retrieval:
 
     Parameters:
         filename (str): Name of the pickle file to save or load df.
-        link (str): URL link to a Wikipedia page containing stock exchange information.
+        index (str): Name of the stock index (e.g., 'S&P 500').
         interval (str): Time self.frequency of historical data to load (e.g., '1min', '1day', '1W').
         self.frequency (str): self.frequency of data intervals ('daily', 'weekly', 'monthly', etc.).
         years (int, optional): Number of years of historical data to load (default: None).
@@ -41,9 +41,9 @@ class IndexData_Retrieval:
             Returns:
                 pandas.df or None: df containing downloaded stock price data if successful, otherwise None.
     """
-    def __init__(self, filename, link, frequency, years=None, months=None, use_yfinance=False):
+    def __init__(self, filename, index, frequency, years=None, months=None, use_yfinance=False):
         self.filename = filename
-        self.link = link
+        self.index = index
         self.df = pd.DataFrame()
         self.frequency = frequency
         self.tickers = []
@@ -70,19 +70,17 @@ class IndexData_Retrieval:
             self.df = self.loaded_df()
 
         return None
-    
+
+
     def get_stockex_tickers(self):
         """
-        Retrieves ticker symbols from a Wikipedia page containing stock exchange information.
+        Get list of the indexes' tickers using PyTickerSymbols
         Returns:
-            List[str]: List of ticker symbols extracted from the specified Wikipedia page.
+            list: List of ticker symbols
         """
-        tables = pd.read_html(self.link)
-        df = tables[4]
-        df.drop(['Company', 'GICS Sector', 'GICS Sub-Industry'],
-                axis=1, inplace=True)
-        tickers = df['Ticker'].values.tolist()
-        return tickers
+        stock_data = PyTickerSymbols()
+        tickers = stock_data.get_stocks_by_index(self.index)
+        return [stock['symbol'] for stock in tickers]
     
     def fetch_data(self, start_date: datetime, end_date: datetime, use_yfinance=False):
         """
@@ -141,11 +139,13 @@ class IndexData_Retrieval:
                 end=end_date.strftime('%Y-%m-%d'),
                 interval=self.frequency,
                 group_by='ticker',
-                auto_adjust=False,  # Set to False to get all available data including 'Adj Close'
+                auto_adjust=False,  # Set to False since we'll manually select 'Adj Close'
                 prepost=False,
                 threads=True,
                 proxy=None
             )
+            # Select only the 'Adj Close' columns for each ticker
+            data = data.xs('Adj Close', level=1, axis=1)
 
             if data.empty:
                 print("No data retrieved from Yahoo Finance. Check the tickers and the date range.")
@@ -252,7 +252,7 @@ class IndexData_Retrieval:
         # Decide whether to use yfinance or Twelve Data API
         stocks_df = self.fetch_data(start_date=start_date, end_date=end_date, use_yfinance=self.use_yfinance)
         if stocks_df is not None:
-            PickleHelper(obj=stocks_df).pickle_dump(filename='nasdaq_dataframe')
+            PickleHelper(obj=stocks_df).pickle_dump(filename=self.filename)
             return stocks_df
         else:
             print("Unable to retrieve data.")
@@ -284,7 +284,7 @@ class IndexData_Retrieval:
 
         self.df.fillna(method='ffill', inplace=True)
         #FIXME: fml this doesn't work if i have consecutive days
-        PickleHelper(obj=self.df).pickle_dump(filename='cleaned_nasdaq_dataframe')
+        PickleHelper(obj=self.df).pickle_dump(filename=f'cleaned_{self.filename}')
 
 class Timestamping:
     """
