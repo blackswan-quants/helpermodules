@@ -42,9 +42,9 @@ class CorrelationAnalysis:
         self.tickers = tickers 
 #        self.start_datetime = start_datetime
  #       self.end_datetime = end_datetime
-  #      self.corrvalues = None
-   #     self.pvalues = None
-    #    self.winner = None
+        self.corrvalues = None
+        self.pvalues = None
+        self.winner = None
 
     def get_correlated_stocks(self):
         """
@@ -57,11 +57,34 @@ class CorrelationAnalysis:
         pvalue_array = np.zeros([len(self.tickers), len(self.tickers)])
         for i in range(len(self.tickers)):
             for j in range(len(self.tickers)):
-                vals_i = self.dataframe[self.tickers[i]].to_numpy()
-                vals_j = self.dataframe[self.tickers[j]].to_numpy()
+                vals_i = self.dataframe.df[self.tickers[i]].to_numpy()
+                vals_j = self.dataframe.df[self.tickers[j]].to_numpy()
+            # Ensure values are numeric
+            try:
+                vals_i = pd.to_numeric(vals_i, errors='coerce')
+                vals_j = pd.to_numeric(vals_j, errors='coerce')
+
+                # Filter out NaN values caused by non-numeric data
+                valid_indices = ~np.isnan(vals_i) & ~np.isnan(vals_j)
+                vals_i = vals_i[valid_indices]
+                vals_j = vals_j[valid_indices]
+
+                # Check if there's enough valid data to calculate correlation
+                if len(vals_i) == 0 or len(vals_j) == 0:
+                    corr_values[i, j] = np.nan
+                    pvalue_array[i, j] = np.nan
+                    continue
+
+                # Calculate correlation
                 r_ij, p_ij = ss.stats.pearsonr(vals_i, vals_j)
                 corr_values[i, j] = r_ij
                 pvalue_array[i, j] = p_ij
+
+            except Exception as e:
+                # Handle any unexpected errors
+                print(f"Error calculating correlation for {self.tickers[i]} and {self.tickers[j]}: {e}")
+                corr_values[i, j] = np.nan
+                pvalue_array[i, j] = np.nan
                 
         self.corrvalues = corr_values
         self.pvalues = pvalue_array
@@ -108,8 +131,8 @@ class CorrelationAnalysis:
         print(max_pair)
         PickleHelper(self.winner).pickle_dump('df_maxcorr_pair')
         plt.figure(figsize=(40,20))
-        plt.plot(self.dataframe[max_pair[1]])
-        plt.plot(self.dataframe[max_pair[0]])
+        plt.plot(self.dataframe.df[max_pair[1]])
+        plt.plot(self.dataframe.df[max_pair[0]])
         plt.show
 
     def print_cross_corr(self, threshold: float, max_lag: int, volumes=None):
@@ -141,3 +164,113 @@ class CorrelationAnalysis:
                             print(f"{concat_dataframe.columns[i]} and {concat_dataframe.columns[j]} are correlated ({corr_matrix.iloc[i, j]}, shift = {shift})")
 
             print('\n')
+    
+        
+    def most_corr_stocks_pair(self):
+        """
+        Identify the most correlated pair of stocks.
+        
+        Steps:
+        1. Copy the correlation matrix (`self.corrvalues`) to a temporary array.
+        2. Remove diagonal values (self-correlation) by setting them to 0.
+        3. Find the maximum correlation value in the adjusted matrix.
+        4. Identify the stock pair corresponding to the maximum correlation.
+        5. Save the most correlated pair in `self.winner`.
+        
+        Returns:
+            list: The names of the two most correlated stocks.
+        """
+        tmp_arr = self.corrvalues.copy()
+        np.fill_diagonal(tmp_arr, 0)  # Exclude self-correlation
+        max_corr = np.nanmax(tmp_arr)
+        max_indexes = np.where(self.corrvalues == max_corr)
+        self.winner = [self.tickers[max_indexes[0][0]], self.tickers[max_indexes[1][0]]]
+        print(f"Most correlated pair: {self.winner} with correlation: {max_corr}")
+        return self.winner
+
+    def rolling_correlation(self, stock1, stock2, window='1H'):
+        """
+        Compute rolling correlation for two stocks over a specified time window.
+        
+        Args:
+            stock1 (str): The ticker symbol of the first stock.
+            stock2 (str): The ticker symbol of the second stock.
+            window (str): The size of the rolling time window (default is 1 hour).
+        
+        Returns:
+            pandas.Series: A time series of rolling correlation values.
+        """
+        df = self.dataframe.df[[stock1, stock2]].dropna()
+        df = df.sort_index()
+        rolling_corr = df[stock1].rolling(window=window).corr(df[stock2])
+        return rolling_corr
+
+    def generate_feature_dfs(self, stock1, stock2, window='1H'):
+        """
+        Create individual DataFrames for the given stocks, with correlation as a feature.
+        
+        Args:
+            stock1 (str): The ticker symbol of the first stock.
+            stock2 (str): The ticker symbol of the second stock.
+            window (str): The size of the rolling time window (default is 1 hour).
+        
+        Returns:
+            Two DataFrames, one for each stock.
+        """
+        rolling_corr = self.rolling_correlation(stock1, stock2, window)
+        df_stock1 = self.dataframe.df[[stock1]].copy()
+        df_stock1['correlation'] = rolling_corr
+        df_stock2 = self.dataframe.df[[stock2]].copy()
+        df_stock2['correlation'] = rolling_corr
+
+        return df_stock1, df_stock2
+
+    def generate_combined_df(self, stock1, stock2, window='1H'):
+        """
+        Create a single DataFrame containing the time series for both stocks
+        and the rolling correlation as a shared feature.
+        
+        Args:
+            stock1 (str): The ticker symbol of the first stock.
+            stock2 (str): The ticker symbol of the second stock.
+            window (str): The size of the rolling time window (default is 1 hour).
+        
+        Returns:
+            pandas.DataFrame: A single DataFrame containing both stocks' data and the correlation.
+        """
+        rolling_corr = self.rolling_correlation(stock1, stock2, window)
+        combined_df = self.dataframe[[stock1, stock2]].copy()
+        combined_df['correlation'] = rolling_corr
+        return combined_df
+
+    def BEST_corr_stocks_pair(self):
+        """
+        Identify the two most correlated stocks and save their data with rolling correlation as a feature.
+        
+        Steps:
+        1. Find the most correlated stock pair using `most_corr_stocks_pair`.
+        2. Compute the rolling correlation for this pair.
+        3. Create individual DataFrames for both stocks with the rolling correlation as a feature.
+        4. Print the first few rows of these DataFrames for verification.
+        5. Save the DataFrames for both stocks using `PickleHelper`.
+        
+        Returns:
+            None
+        """
+        # Step 1: Find the most correlated stock pair
+        most_correlated = self.most_corr_stocks_pair()
+
+        # Step 2: Generate feature DataFrames with rolling correlation
+        df_stock1, df_stock2 = self.generate_feature_dfs(most_correlated[0], most_correlated[1], window='60min')
+
+        # Step 3: Print the first few rows for checking
+        print(df_stock1.head())
+        print(df_stock2.head())
+
+        # Step 4: Save the DataFrames to pickle files
+        PickleHelper(df_stock1).pickle_dump('dataframe_stock_1')
+        PickleHelper(df_stock2).pickle_dump('dataframe_stock_2')
+
+
+
+
