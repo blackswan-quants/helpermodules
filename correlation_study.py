@@ -63,12 +63,12 @@ class CorrelationAnalysis:
             for j in range(len(self.tickers)):
                 if use_pct_change:
                     # Calculate percentage change
-                    vals_i = self.dataframe.df[self.tickers[i]].pct_change().dropna().to_numpy()
-                    vals_j = self.dataframe.df[self.tickers[j]].pct_change().dropna().to_numpy()
+                    vals_i = self.dataframe[self.tickers[i]].pct_change().dropna().to_numpy()
+                    vals_j = self.dataframe[self.tickers[j]].pct_change().dropna().to_numpy()
                 else:
                     # Use original values
-                    vals_i = self.dataframe.df[self.tickers[i]].to_numpy()
-                    vals_j = self.dataframe.df[self.tickers[j]].to_numpy()
+                    vals_i = self.dataframe[self.tickers[i]].to_numpy()
+                    vals_j = self.dataframe[self.tickers[j]].to_numpy()
                 # Ensure values are numeric
                 try:
                     vals_i = pd.to_numeric(vals_i, errors='coerce')
@@ -199,8 +199,8 @@ class CorrelationAnalysis:
         print(max_pair)
         PickleHelper(self.winner).pickle_dump('df_maxcorr_pair')
         plt.figure(figsize=(40,20))
-        plt.plot(self.dataframe.df[max_pair[1]])
-        plt.plot(self.dataframe.df[max_pair[0]])
+        plt.plot(self.dataframe[max_pair[1]])
+        plt.plot(self.dataframe[max_pair[0]])
         plt.show
 
     def print_cross_corr(self, threshold: float, max_lag: int, volumes=None):
@@ -304,27 +304,42 @@ class CorrelationAnalysis:
         Returns:
             pandas.Series: A time series of rolling correlation values.
         """
-        df = self.dataframe.df[[stock1, stock2]].dropna()
+        df = self.dataframe[[stock1, stock2]].dropna()
         df = df.sort_index()
         rolling_corr = df[stock1].rolling(window=window).corr(df[stock2])
         return rolling_corr
 
-    def generate_feature_dfs(self, stock1, stock2, window='1H'):
+    def generate_feature_dfs(self, stock1, stock2, window='1H', fillna_method=None):
         """
         Create individual DataFrames for the given stocks, with correlation as a feature.
-        
+
         Args:
             stock1 (str): The ticker symbol of the first stock.
             stock2 (str): The ticker symbol of the second stock.
             window (str): The size of the rolling time window (default is 1 hour).
-        
+            fillna_method (str, optional): The method to fill NaN values in the correlation column. 
+                                        Options: 'ffill', 'bfill', or None (default).
+
         Returns:
             Two DataFrames, one for each stock.
         """
+        # Calculate rolling correlation
         rolling_corr = self.rolling_correlation(stock1, stock2, window)
-        df_stock1 = self.dataframe.df[[stock1]].copy()
+        
+        # Handle NaN values in the rolling correlation
+        if fillna_method:
+            if fillna_method == 'ffill':
+                rolling_corr = rolling_corr.fillna(method='ffill')
+            elif fillna_method == 'bfill':
+                rolling_corr = rolling_corr.fillna(method='bfill')
+            else:
+                raise ValueError("Invalid fillna_method. Use 'ffill', 'bfill', or None.")
+
+        # Create DataFrames for each stock
+        df_stock1 = self.dataframe[[stock1]].copy()
         df_stock1['correlation'] = rolling_corr
-        df_stock2 = self.dataframe.df[[stock2]].copy()
+        
+        df_stock2 = self.dataframe[[stock2]].copy()
         df_stock2['correlation'] = rolling_corr
 
         return df_stock1, df_stock2
@@ -365,11 +380,11 @@ class CorrelationAnalysis:
         most_correlated = self.most_corr_stocks_pair()
 
         # Step 2: Generate feature DataFrames with rolling correlation
-        df_stock1, df_stock2 = self.generate_feature_dfs(most_correlated[0], most_correlated[1], window='60min')
+        df_stock1, df_stock2 = self.generate_feature_dfs(most_correlated[0], most_correlated[1], window='60min', fillna_method='ffill')
 
         # Step 3: Print the first few rows for checking
-        print(df_stock1.head())
-        print(df_stock2.head())
+       # print(df_stock1.head())
+       # print(df_stock2.head())
 
         # Step 4: Save the DataFrames to pickle files
         PickleHelper(df_stock1).pickle_dump('dataframe_stock_1')
