@@ -8,7 +8,7 @@ import seaborn
 import matplotlib.colors
 import scipy.stats as ss
 from scipy import signal
-from statsmodels.tsa.vector_ar.vecm import coint # import from statsmodels.tsa.stattools if it doesn't work
+from statsmodels.tsa.stattools import coint # import from statsmodels.tsa.vector_ar.vecm if it doesn't work
 from datetime import timedelta, datetime
 
 from sklearn.preprocessing import MinMaxScaler
