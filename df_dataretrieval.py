@@ -60,24 +60,55 @@ class IndexData_Retrieval:
         self.months = months
         self.use_yfinance = use_yfinance
 
-    def getdata(self):
-        # Append .pkl extension to filename if missing
-        if not re.search("^.*\\.pkl$", self.filename):
-            self.filename += ".pkl"
-        file_path = "./pickle_files/" + self.filename
+def getdata(self):
+    """
+    Loads a dataframe of stock price data from a pickle file if it exists, otherwise creates a new dataframe.
 
-        # Check if the pickle file exists to load previously saved data
-        if os.path.isfile(file_path):
+    This method checks for the existence of a pickle file corresponding to the specified filename. 
+    If the pickle file exists, it loads the data from it. If not, it checks for a CSV file and loads 
+    data from there if available. If neither file exists, it retrieves the stock tickers and 
+    fetches new data.
+
+    Returns:
+        pandas.DataFrame or None: DataFrame containing stock price data if loaded successfully, otherwise None.
+    """
+    # Append .pkl extension to filename if missing
+    if not re.search(r"\.pkl$", self.filename):
+        self.filename += ".pkl"
+    
+    # Construct the file paths
+    pkl_file_path = os.path.join("data", "pickle_files", self.filename)
+
+    # Corresponding CSV file path (replace .pkl with .csv)
+    csv_file_path = os.path.join("data", "files", re.sub(r"\.pkl$", ".csv", self.filename))
+
+    # Check if the pickle file exists to load previously saved data
+    if os.path.isfile(pkl_file_path):
+        try:
             # Load data from pickle if it exists and set ticker columns
             self.df = PickleHelper.pickle_load(self.filename).obj
             self.tickers = self.df.columns.tolist()
             return self.df
-        else:
-            # Get tickers if no saved data, and load a new DataFrame
-            self.tickers = self.get_stockex_tickers()
-            self.df = self.loaded_df()
+        except Exception as e:
+            print(f"Error loading pickle file {self.filename}: {e}")
+            return None
 
-        return None
+    # Check if the CSV file exists
+    elif os.path.isfile(csv_file_path):
+        try:
+            # Load data from CSV if pickle does not exist but CSV exists
+            self.df = pd.read_csv(csv_file_path)
+            self.tickers = self.df.columns.tolist()
+            return self.df
+        except Exception as e:
+            print(f"Error loading CSV file {self.filename}: {e}")
+            return None
+    
+    else:
+        # Get tickers if no saved data, and load a new DataFrame
+        self.tickers = self.get_stockex_tickers()
+        self.df = self.loaded_df()
+        return self.df
 
 
     def get_stockex_tickers(self):

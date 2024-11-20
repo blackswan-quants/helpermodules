@@ -8,7 +8,7 @@ import seaborn
 import matplotlib.colors
 import scipy.stats as ss
 from scipy import signal
-from statsmodels.tsa.vector_ar.vecm import coint # import from statsmodels.tsa.stattools if it doesn't work
+from statsmodels.tsa.stattools import coint 
 from datetime import timedelta, datetime
 
 from sklearn.preprocessing import MinMaxScaler
@@ -46,56 +46,58 @@ class CorrelationAnalysis:
         self.corrvalues = None
         self.pvalues = None
         self.winner = None
+def get_correlated_stocks(self, use_pct_change=False):
+    """
+    Calculate Pearson correlation coefficients and p-values for the given stocks, saving them into two separate pickle files: 'correlationvalues_array' and 'pvalues_array'.
+    
+    Parameters:
+        use_pct_change (bool): If True, use percentage change instead of raw values.
+    
+    Returns:
+        None
+    """
+    num_stocks = len(self.tickers)
+    corr_values = np.full((num_stocks, num_stocks), np.nan)  # Initialize with NaNs
+    pvalue_array = np.full((num_stocks, num_stocks), np.nan)  # Initialize with NaNs
 
-    def get_correlated_stocks(self, use_pct_change=False):
-        """
-        Calculate correlation coefficients and p-values for the given stocks within a given time period.
-        
-        Parameters:
-            use_pct_change (bool): If True, use percentage change instead of raw values.
-        
-        Returns:
-            None
-        """
-        corr_values = np.zeros([len(self.tickers), len(self.tickers)])
-        pvalue_array = np.zeros([len(self.tickers), len(self.tickers)])
-        for i in range(len(self.tickers)):
-            for j in range(len(self.tickers)):
+    for i in range(num_stocks):
+        for j in range(num_stocks):
+            try:
+                # Prepare data based on use_pct_change flag
                 if use_pct_change:
-                    # Calculate percentage change
                     vals_i = self.dataframe[self.tickers[i]].pct_change().dropna().to_numpy()
                     vals_j = self.dataframe[self.tickers[j]].pct_change().dropna().to_numpy()
                 else:
-                    # Use original values
                     vals_i = self.dataframe[self.tickers[i]].to_numpy()
                     vals_j = self.dataframe[self.tickers[j]].to_numpy()
+                
                 # Ensure values are numeric
-                try:
-                    vals_i = pd.to_numeric(vals_i, errors='coerce')
-                    vals_j = pd.to_numeric(vals_j, errors='coerce')
-                    # Filter out NaN values caused by non-numeric data
-                    valid_indices = ~np.isnan(vals_i) & ~np.isnan(vals_j)
-                    vals_i = vals_i[valid_indices]
-                    vals_j = vals_j[valid_indices]
-                    # Check if there's enough valid data to calculate correlation
-                    if len(vals_i) == 0 or len(vals_j) == 0:
-                        corr_values[i, j] = np.nan
-                        pvalue_array[i, j] = np.nan
-                        continue
+                vals_i = pd.to_numeric(vals_i, errors='coerce')
+                vals_j = pd.to_numeric(vals_j, errors='coerce')
 
-                    # Calculate correlation
-                    r_ij, p_ij = ss.stats.pearsonr(vals_i, vals_j)
-                    corr_values[i, j] = r_ij
-                    pvalue_array[i, j] = p_ij
-                except Exception as e:
-                    # Handle any unexpected errors
-                    print(f"Error calculating correlation for {self.tickers[i]} and {self.tickers[j]}: {e}")
-                    corr_values[i, j] = np.nan
-                    pvalue_array[i, j] = np.nan     
-        self.corrvalues = corr_values
-        self.pvalues = pvalue_array
+                if np.isnan(vals_i).any() or np.isnan(vals_j).any():
+                    raise ValueError("Data contains NaN values after conversion to numeric.")
+
+                # Calculate Pearson correlation
+                r_ij, p_ij = ss.pearsonr(vals_i, vals_j)
+                corr_values[i, j] = r_ij
+                pvalue_array[i, j] = p_ij
+
+            except ValueError as ve:
+                print(f"ValueError for {self.tickers[i]} and {self.tickers[j]}: {ve}")
+            except Exception as e:
+                print(f"Unexpected error for {self.tickers[i]} and {self.tickers[j]}: {e}")
+
+    self.corrvalues = corr_values
+    self.pvalues = pvalue_array
+
+    # Persist results using PickleHelper
+    try:
         PickleHelper(self.corrvalues).pickle_dump('correlationvalues_array')
         PickleHelper(self.pvalues).pickle_dump('pvalues_array')
+    except Exception as e:
+        print(f"Error saving correlation or p-value arrays: {e}")
+
 
     def get_correlation_lags(self, use_pct_change=False):
         """
@@ -159,51 +161,98 @@ class CorrelationAnalysis:
         self.coint_scores = coint_value
         PickleHelper(self.coint_scores).pickle_dump('cointegration_values_array')
 
-    def plot_corr_matrix(self):
+def corr_stocks_top_three_pairs(self):
+    """
+    Identifies and plots the top three most correlated stock pairs.
+    
+    This method filters out correlations with p-values greater than 0.05 and the diagonal of the correlation matrix, 
+    identifies the top three most correlated pairs, and plots their price comparison. It also saves the details of these 
+    pairs to separate files.
+    """
+    # Validate correlation and p-value matrices
+    self._validate_matrix(self.corrvalues, "correlation coefficients")
+    self._validate_matrix(self.pvalues, "p-values")
+
+    # Mask correlations with p-values > 0.05 and the diagonal
+    filtered_corr = np.where(self.pvalues > 0.05, np.nan, self.corrvalues)
+    np.fill_diagonal(filtered_corr, np.nan)
+
+    # Identify indices of the top three correlations
+    top_three_indices = np.argsort(filtered_corr.flatten())[-3:][::-1]  # Flatten, sort, and get top 3 indices
+    top_pairs = []
+
+    for idx in top_three_indices:
+        i, j = divmod(idx, len(self.tickers))
+        if not np.isnan(filtered_corr[i, j]):
+            pair = [self.tickers[i], self.tickers[j]]
+            top_pairs.append(pair)
+    
+    # Nested function to plot the correlation heatmap
+    def _plot_corr_matrix(corr_matrix):
         """
-        Plot the correlation matrix heatmap for the given DataFrame.
+        Plot the correlation matrix heatmap for the given data.
         
-        Returns:
-            None
+        Parameters:
+            corr_matrix (np.ndarray): The correlation matrix to be plotted.
         """
-        norm = matplotlib.colors.Normalize(-1, 1)
-        colors = [[norm(-1), "red"],
-                  [norm(-0.93), "lightgrey"],
-                  [norm(0.93), "lightgrey"],
-                  [norm(1), "green"]]
-        cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", colors)
+        def _generate_custom_colormap():
+            """
+            Generate a custom color map for the heatmap based on correlation values.
+            
+            Returns:
+                matplotlib.colors.LinearSegmentedColormap: Custom color map.
+            """
+            norm = matplotlib.colors.Normalize(-1, 1)
+            colors = [
+                [norm(-1), "red"],
+                [norm(-0.93), "lightgrey"],
+                [norm(0.93), "lightgrey"],
+                [norm(1), "green"]
+            ]
+            return matplotlib.colors.LinearSegmentedColormap.from_list("", colors)
+
+        # Use the nested function to get the color map
+        cmap = _generate_custom_colormap()
+
+        # Plot the heatmap
         plt.figure(figsize=(40, 20))
-        seaborn.heatmap(pd.DataFrame(self.corrvalues, columns=self.tickers, index=self.tickers), annot=True, cmap=cmap)
+        seaborn.heatmap(
+            pd.DataFrame(corr_matrix, columns=self.tickers, index=self.tickers),
+            annot=True,
+            cmap=cmap
+        )
+        plt.title("Correlation Matrix Heatmap", fontsize=16)
         plt.show()
 
-    def corr_stocks_pair(self):
-        """
-        Identify the pair of stocks with the maximum correlation coefficient and save it to a pickle file.
-        
-        Returns:
-            None
-        """
-        corr_values_filtered = np.where(self.pvalues > 0.05, self.corrvalues, np.nan)
-        #min_corr = np.nanmin(corr_values_filtered)
-        tmp_arr = corr_values_filtered.copy()
-        for i in range(len(tmp_arr)):
-            tmp_arr[i, i] = 0
-        #max_corr = np.nanmax(tmp_arr)
-        #max_indexes = np.where(self.corrvalues == max_corr)
-        #max_pair = [self.tickers[max_indexes[0][0]], self.tickers[max_indexes[0][1]]]
-        # I commented all the things above because they aren't saved
-        corr_order = np.argsort(tmp_arr.flatten())
-        corr_num = corr_order[-1]
-        max_pair = [self.tickers[corr_num // len(self.tickers)], self.tickers[corr_num % len(self.tickers)]]
-        self.winner = max_pair
-        print(max_pair)
-        PickleHelper(self.winner).pickle_dump('df_maxcorr_pair')
-        plt.figure(figsize=(40,20))
-        plt.plot(self.dataframe[max_pair[1]])
-        plt.plot(self.dataframe[max_pair[0]])
-        plt.show
+    # Plot the full correlation matrix for visualization
+    _plot_corr_matrix(self.corrvalues)
+
+    # Process and save each pair
+    for rank, pair in enumerate(top_pairs, 1):
+        print(f"Top {rank} correlated pair: {pair} with correlation {filtered_corr[i, j]:.2f}")
+
+        # Save pair details
+        file_name = f"df_maxcorr_pair_{rank}"
+        PickleHelper(pair).pickle_dump(file_name)
+
+        # Plot their price comparison
+        self.dataframe[pair].plot(figsize=(12, 6), title=f"Price Comparison: {pair}")
+        plt.show()
+
+
 
     def print_cross_corr(self, threshold: float, max_lag: int, volumes=None):
+        """
+        Prints the cross-correlation of stocks with a lag up to max_lag.
+
+        This method iterates through each stock in the dataframe, calculates the cross-correlation with all other stocks, 
+        and prints the pairs with a cross-correlation greater than or equal to the specified threshold.
+
+        Args:
+            threshold (float): The minimum cross-correlation required for a pair to be considered correlated.
+            max_lag (int): The maximum lag to consider for cross-correlation analysis.
+            volumes (optional): Not used in this implementation.
+        """
         for i in range(len(self.dataframe.columns)):
             for j in range(len(self.dataframe.columns)):
                 if i != j:
@@ -220,6 +269,18 @@ class CorrelationAnalysis:
                             print(f"{self.tickers[i]} and {self.tickers[j]} are correlated ({corr}) with lag = {lags[k]}")
 
     def print_corr(self, threshold: float, max_lag: int, volume_filter=None):
+        """
+        Prints the correlated pairs of stocks with a lag up to max_lag.
+
+        This method iterates through each stock in the dataframe, shifts the dataframe by each lag from 0 to max_lag, 
+        calculates the Pearson correlation coefficient between the original and shifted dataframes, and prints the pairs 
+        with a correlation coefficient greater than or equal to the specified threshold.
+
+        Args:
+            threshold (float): The minimum correlation coefficient required for a pair to be considered correlated.
+            max_lag (int): The maximum lag to consider for correlation analysis.
+            volume_filter (optional): Not used in this implementation.
+        """
         for shift in range(max_lag + 1):
             shifted_df = self.dataframe.shift(shift)
             concat_dataframe = pd.concat([self.dataframe, shifted_df.add_suffix(f'_shifted_{shift}')], axis=1)
@@ -234,7 +295,12 @@ class CorrelationAnalysis:
             print('\n')
 
     def plot_stocks(self):
-        self.dataframe.plot(subplots=True); # prints the price off all the stocks in the dataframe 
+        """
+        Plots the price of all stocks in the DataFrame.
+
+        This method plots the price of each stock in the DataFrame as a separate subplot, allowing for a visual comparison of the stock prices over time.
+        """
+        self.dataframe.plot(subplots=True)
 
     def plot_lag_matrix(self):
         """
@@ -294,7 +360,7 @@ class CorrelationAnalysis:
 
     def rolling_correlation(self, stock1, stock2, window='1H'):
         """
-        Compute rolling correlation for two stocks over a specified time window.
+        Compute rolling correlation for two stocks over a specified time window of one hour.
         
         Args:
             stock1 (str): The ticker symbol of the first stock.
@@ -304,8 +370,14 @@ class CorrelationAnalysis:
         Returns:
             pandas.Series: A time series of rolling correlation values.
         """
+        # Ensure the DataFrame index is a datetime index
+        if not pd.api.types.is_datetime64_any_dtype(self.dataframe.index):
+            raise ValueError("DataFrame index must be a datetime index.")
+
+        # Select the relevant columns and drop NaN values
         df = self.dataframe[[stock1, stock2]].dropna()
-        df = df.sort_index()
+
+        # Calculate rolling correlation over a time window of one hour
         rolling_corr = df[stock1].rolling(window=window).corr(df[stock2])
         return rolling_corr
 
@@ -362,30 +434,55 @@ class CorrelationAnalysis:
         combined_df['correlation'] = rolling_corr
         return combined_df
 
-    def BEST_corr_stocks_pair(self):
-        """
-        Identify the two most correlated stocks and save their data with rolling correlation as a feature.
+def best_corr_stocks_pair(self):
+    """
+    Identify the two most correlated stocks and save their data with rolling correlation as a feature.
+    
+    Steps:
+    1. Find the most correlated stock pair using `most_corr_stocks_pair`.
+    2. Compute the rolling correlation for this pair.
+    3. Create individual DataFrames for both stocks with the rolling correlation as a feature.
+    4. Print the first few rows of these DataFrames for verification.
+    5. Save the DataFrames for both stocks using `PickleHelper`.
+    
+    Returns:
+        None
+    """
+    # Step 1: Find the most correlated stock pair
+    most_correlated = self.most_corr_stocks_pair()
+
+    # Step 2: Generate feature DataFrames with rolling correlation
+    df_stock1, df_stock2 = self.generate_feature_dfs(most_correlated[0], most_correlated[1], window='60min', fillna_method='ffill')
+
+    # Step 3: Print the first few rows for checking
+    # print(df_stock1.head())
+    # print(df_stock2.head())
+
+    # Step 4: Save the DataFrames to pickle files
+    PickleHelper(df_stock1).pickle_dump('dataframe_stock_1')
+    PickleHelper(df_stock2).pickle_dump('dataframe_stock_2')
         
-        Steps:
-        1. Find the most correlated stock pair using `most_corr_stocks_pair`.
-        2. Compute the rolling correlation for this pair.
-        3. Create individual DataFrames for both stocks with the rolling correlation as a feature.
-        4. Print the first few rows of these DataFrames for verification.
-        5. Save the DataFrames for both stocks using `PickleHelper`.
-        
-        Returns:
-            None
-        """
-        # Step 1: Find the most correlated stock pair
-        most_correlated = self.most_corr_stocks_pair()
+    # Helper Methods
+def _validate_tickers(self):
+    """Validates that tickers exist in the DataFrame."""
+    if not all(ticker in self.dataframe.columns for ticker in self.tickers):
+        raise ValueError("Some tickers are missing in the DataFrame columns.")
 
-        # Step 2: Generate feature DataFrames with rolling correlation
-        df_stock1, df_stock2 = self.generate_feature_dfs(most_correlated[0], most_correlated[1], window='60min', fillna_method='ffill')
+def _validate_matrix(self, matrix, name):
+    """Validates that a matrix is not None."""
+    if matrix is None:
+        raise ValueError(f"{name.capitalize()} matrix has not been calculated yet.")
 
-        # Step 3: Print the first few rows for checking
-       # print(df_stock1.head())
-       # print(df_stock2.head())
+def _get_values(self, i, j, use_pct_change):
+    """Extracts values for analysis."""
+    vals_i = self.dataframe[self.tickers[i]].pct_change().dropna().to_numpy() if use_pct_change else self.dataframe[self.tickers[i]].to_numpy()
+    vals_j = self.dataframe[self.tickers[j]].pct_change().dropna().to_numpy() if use_pct_change else self.dataframe[self.tickers[j]].to_numpy()
+    return vals_i, vals_j
 
-        # Step 4: Save the DataFrames to pickle files
-        PickleHelper(df_stock1).pickle_dump('dataframe_stock_1')
-        PickleHelper(df_stock2).pickle_dump('dataframe_stock_2')
+def _plot_heatmap(self, data, title, center_color=False):
+    """Plots a heatmap for given data."""
+    cmap = "coolwarm" if center_color else "viridis"
+    plt.figure(figsize=(12, 6))
+    sns.heatmap(data, annot=True, xticklabels=self.tickers, yticklabels=self.tickers, cmap=cmap, center=0 if center_color else None)
+    plt.title(title)
+    plt.show()
