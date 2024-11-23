@@ -23,7 +23,7 @@ class PickleHelper:
         if not re.search(r"^.*\.pkl$", filename):
             filename += ".pkl"
 
-        file_path = "./pickle_files/" + filename
+        file_path = "data/pickle_files/" + filename
         with open(file_path, "wb") as f:
             pickle.dump(self.obj, f)
 
@@ -44,7 +44,7 @@ class PickleHelper:
         if not re.search(r"^.*\.pkl$", filename):
             filename += ".pkl"
 
-        file_path = "./pickle_files/" + filename
+        file_path = "data/pickle_files/" + filename
 
         try:
             with open(file_path, "rb") as f:
