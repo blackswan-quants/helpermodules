@@ -302,6 +302,23 @@ class IndexData_Retrieval:
             td = TDClient(apikey=API_KEY)
             # Create a DataFrame with all ticker columns, filled initially with NaN
             dataframes = pd.DataFrame(np.nan, columns=self.tickers, index=[d for d in Timestamping(start_date, end_date)])
+            
+            #divide tickers into batches
+            def divide_tickers_inbatches(tickers):
+                """
+                Divides the tickers list into batches of 55.
+                Parameters:
+                -----------
+                tickers : list
+                    The list of ticker symbols to be divided.
+                Returns:
+                --------
+                list
+                    A list of ticker batches, each containing up to 55 tickers.
+                """
+                return [tickers[i:i+55] for i in range(0, len(tickers), 55)]
+
+            ticker_batches = divide_tickers_inbatches(tickers=self.tickers)
 
             #divide tickers into batches
             def divide_tickers_inbatches(tickers):
