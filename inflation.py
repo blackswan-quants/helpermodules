@@ -1,7 +1,7 @@
 import pandas as pd
 import re
 
-def download_cpi_data(selected_countries = None):
+def download_cpi_data(selected_countries=None):
     """
     Download CPI data from a CSV file and process it.
 
@@ -13,7 +13,6 @@ def download_cpi_data(selected_countries = None):
     Returns:
         pandas.DataFrame: CPI data for the selected countries (if provided) or for all countries.
     """
-
     cpi_df = pd.read_csv('Consumer_Price_Index_CPI.csv', delimiter=";")
     cpi_df = cpi_df.rename(columns={'Unnamed: 0': 'Country'})
 
@@ -25,7 +24,6 @@ def download_cpi_data(selected_countries = None):
 
     years = list(cpi_df.index.values)
     countries = list(cpi_df.columns.values)
-
 
     # Convert "," to "." in the dataframe
     for year in years:
@@ -40,29 +38,37 @@ def download_cpi_data(selected_countries = None):
     else:
         return cpi_df
 
-
 def apply_inflation_on_portfolio(portflio_df, selected_country):
-    # date, amount, pct_change
+    """
+    Apply inflation to a portfolio based on the CPI data of a selected country.
+
+    Parameters:
+        portflio_df (pandas.DataFrame): The portfolio data with 'Amount' and 'Pct Change' columns.
+        selected_country (list): The country for which CPI data is to be applied.
+
+    Returns:
+        pandas.DataFrame: The portfolio data with inflation adjustments applied.
+    """
     portfolio_with_inflation = pd.DataFrame()
     cpi_data = download_cpi_data(selected_country)
 
-    dates = list(portflio_df.index())
+    dates = list(portflio_df.index)
 
-    #Uso [:4] perchè il formato è YYYY-MM-DD
+    # Use [:4] because the format is YYYY-MM-DD
     start_year = int(dates[0][:4])
     end_year = int(dates[-1][:4])
 
-    for year in range(start_year, end_year+1):
-        # Divido per 12 l'inflazione annuale
-        montly_inflation = cpi_data[year] / 12
+    for year in range(start_year, end_year + 1):
+        # Divide annual inflation by 12 to get monthly inflation
+        monthly_inflation = cpi_data[year] / 12
 
-        # Itera tutte le date, ogni volta agisci solo su quella dell'anno di interesse (perchè l'inflazione cambia anno per anno)
+        # Iterate over all dates, acting only on the relevant year's dates
         for date in dates:
-            if date[:4] == year:
-                amount = portflio_df['Amount'][date]
-                pct_change = portflio_df['Pct Change'][date]
+            if date[:4] == str(year):
+                amount = portflio_df.loc[date, 'Amount']
+                pct_change = portflio_df.loc[date, 'Pct Change']
 
-                portflio_df['Amount'][date] = amount - amount*montly_inflation
-                portflio_df['Pct Change'][date] = pct_change - montly_inflation
-    
+                portflio_df.at[date, 'Amount'] = amount - amount * monthly_inflation
+                portflio_df.at[date, 'Pct Change'] = pct_change - monthly_inflation
+
     return portflio_df
