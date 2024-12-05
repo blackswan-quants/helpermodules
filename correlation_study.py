@@ -308,11 +308,12 @@ class CorrelationAnalysis:
             # Create DataFrames for each stock, and attach the correlation df to stock2
             df_stock1 = self.dataframe[[stock1.name]].copy()
             df_stock2 = self.dataframe[[stock2.name]].copy()
-            df_stock2['Rolling_Correlation_Coefficient'] = rolling_corr
-            return df_stock1, df_stock2
+            df_rolling_corr = pd.DataFrame()
+            df_rolling_corr['Rolling_Correlation_Coefficient'] = rolling_corr
+            return df_stock1, df_stock2, df_rolling_corr
 
         # Step 4: Combine the DataFrames for both stocks
-        def generate_combined_df(df_stock1, df_stock2):
+        def generate_combined_df(df_stock1, df_stock2, df_rolling_corr):
             """
             Create a single DataFrame containing the time series for both stocks
             and the rolling correlation as a shared feature.
@@ -324,19 +325,18 @@ class CorrelationAnalysis:
             Returns:
                 pandas.DataFrame: A single DataFrame containing both stocks' data and the correlation.
             """
-            combined_df = pd.concat([df_stock1, df_stock2], axis=1)
+            combined_df = pd.concat([df_stock1, df_stock2, df_rolling_corr], axis=1)
             return combined_df
 
         # Step 5: Execute the process
-        df_stock1, df_stock2 = generate_feature_dfs(stock1 = self.dataframe[most_correlated_pair[0]], stock2 = self.dataframe[most_correlated_pair[1]], window='60min', fillna_method='ffill')
-        df_final = generate_combined_df(df_stock1, df_stock2)
-        #Renaming the colums 
-        df_final.rename(columns={self.dataframe[most_correlated_pair[0]].name: "AdjClose_Stock_1", self.dataframe[most_correlated_pair[1]].name: "AdjClose_Stock_2"},inplace=True)
+        df_stock1, df_stock2, df_rolling_corr = generate_feature_dfs(stock1 = self.dataframe[most_correlated_pair[0]], stock2 = self.dataframe[most_correlated_pair[1]], window='60min', fillna_method='ffill')
+        df_final = generate_combined_df(df_stock1, df_stock2, df_rolling_corr)
         # Step 6: Save the DataFrames to pickle files
         PickleHelper(df_final).pickle_dump('final_dataframe')
         print("Pickle file saved for the final dataframe: final_dataframe.pkl")
         # df = PickleHelper.pickle_load('final_dataframe.pkl').obj
         # print(df.to_string())
+        # df.to_excel('NewRollingCorr.xlsx', index=False)
         return df_final
 
     def get_correlation_lags(self, use_pct_change=False):
