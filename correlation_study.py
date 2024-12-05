@@ -12,6 +12,7 @@ from statsmodels.tsa.stattools import coint # import from statsmodels.tsa.vector
 from datetime import timedelta, datetime
 import seaborn as sns
 
+
 from sklearn.preprocessing import MinMaxScaler
 
 from helpermodules.memory_handling import PickleHelper
@@ -247,9 +248,44 @@ class CorrelationAnalysis:
             # Ensure the DataFrame is sorted by the index (DatetimeIndex)
             df = self.dataframe.sort_index()
             
-            # Calculate rolling correlation over a time window
-            rolling_corr = df[stock1].rolling(window=window).corr(df[stock2])
+            # Use time-based rolling window if 'window' is a string (e.g., '1H')
+            if isinstance(window, str):
+                rolling_corr = (
+                df[stock1.name]
+                .rolling(window=window, min_periods=window_size_to_observations(window))
+                .corr(df[stock2.name])
+                )
+            else:
+                # Fixed-size rolling window(int)
+                rolling_corr = (
+                df[stock1.name]
+                .rolling(window=window, min_periods=window)
+                .corr(df[stock2.name])
+                )
+            
+            #Manage Outliars (-inf values)
+            rolling_corr = rolling_corr.replace(-np.inf, np.nan)
+            #Fill NaN with the Value Before (Where we don't have enought consecutive values to compute the RTW correlation)
+            rolling_corr.fillna(method='bfill',inplace=True)
             return rolling_corr
+
+        def window_size_to_observations(window):
+            """
+            Calculate the minimum number of observations needed for a rolling time-based window.
+            
+            Args:
+                window (str): A pandas offset alias representing the time window (e.g., '1H').
+                
+            Returns:
+                int: Minimum number of observations in the time window.
+            """
+            frequency = '1min'
+            
+            # Map frequency and window to approximate observations
+            freq_to_seconds = pd.to_timedelta(frequency).total_seconds()
+            window_seconds = pd.to_timedelta(window).total_seconds()
+            
+            return int(window_seconds // freq_to_seconds)
         
         # Step 3: Create individual DataFrames for both stocks with the rolling correlation as a feature
         def generate_feature_dfs(stock1, stock2, window='1H', fillna_method=None):
@@ -269,39 +305,38 @@ class CorrelationAnalysis:
             # Calculate rolling correlation
             rolling_corr = rolling_correlation(stock1, stock2, window)
 
-            # Create DataFrames for each stock
-            df_stock1 = self.dataframe[[stock1]].copy()
-            df_stock1['correlation'] = rolling_corr
-            
-            df_stock2 = self.dataframe[[stock2]].copy()
-            df_stock2['correlation'] = rolling_corr
-
-            return df_stock1, df_stock2
+            # Create DataFrames for each stock, and attach the correlation df to stock2
+            df_stock1 = self.dataframe[[stock1.name]].copy()
+            df_stock2 = self.dataframe[[stock2.name]].copy()
+            df_rolling_corr = pd.DataFrame()
+            df_rolling_corr['Rolling_Correlation_Coefficient'] = rolling_corr
+            return df_stock1, df_stock2, df_rolling_corr
 
         # Step 4: Combine the DataFrames for both stocks
-        def generate_combined_df(df_stock1, df_stock2):
+        def generate_combined_df(df_stock1, df_stock2, df_rolling_corr):
             """
             Create a single DataFrame containing the time series for both stocks
             and the rolling correlation as a shared feature.
             
             Args:
-                df_stock1 (pandas.DataFrame): DataFrame containing stock1 data and correlation.
+                df_stock1 (pandas.DataFrame): DataFrame containing stock1 data.
                 df_stock2 (pandas.DataFrame): DataFrame containing stock2 data and correlation.
             
             Returns:
                 pandas.DataFrame: A single DataFrame containing both stocks' data and the correlation.
             """
-            combined_df = pd.concat([df_stock1, df_stock2], axis=1)
+            combined_df = pd.concat([df_stock1, df_stock2, df_rolling_corr], axis=1)
             return combined_df
 
         # Step 5: Execute the process
-        df_stock1, df_stock2 = generate_feature_dfs(stock1 = self.dataframe[most_correlated_pair[0]], stock2 = self.dataframe[most_correlated_pair[1]], window='60min', fillna_method='ffill')
-        df_final = generate_combined_df(df_stock1, df_stock2)
-
+        df_stock1, df_stock2, df_rolling_corr = generate_feature_dfs(stock1 = self.dataframe[most_correlated_pair[0]], stock2 = self.dataframe[most_correlated_pair[1]], window='60min', fillna_method='ffill')
+        df_final = generate_combined_df(df_stock1, df_stock2, df_rolling_corr)
         # Step 6: Save the DataFrames to pickle files
         PickleHelper(df_final).pickle_dump('final_dataframe')
         print("Pickle file saved for the final dataframe: final_dataframe.pkl")
-        
+        # df = PickleHelper.pickle_load('final_dataframe.pkl').obj
+        # print(df.to_string())
+        # df.to_excel('NewRollingCorr.xlsx', index=False)
         return df_final
 
     def get_correlation_lags(self, use_pct_change=False):
