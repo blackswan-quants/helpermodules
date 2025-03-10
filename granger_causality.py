@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from memory_handling import PickleHelper
+from helpermodules.memory_handling import PickleHelper
 from statsmodels.tsa.stattools import grangercausalitytests
 
 class GrangerCausalityAnalysis:
