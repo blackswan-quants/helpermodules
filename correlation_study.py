@@ -223,9 +223,10 @@ class CorrelationAnalysis:
         Returns:
             pandas.DataFrame: A combined DataFrame containing the two most correlated stocks and the rolling correlation.
         """
-    
+        
         # Step 1: Get the top 3 correlated stocks pickled, get winner
         most_correlated_pair = self.top3_corrstocks()
+        
         # Step 2: Compute the rolling correlation between two stock tickers
         # Step 2: Compute the rolling correlation between the two most correlated stocks
         def rolling_correlation(stock1, stock2, window='1H'):
@@ -268,7 +269,7 @@ class CorrelationAnalysis:
             """
             # Calculate rolling correlation
             rolling_corr = rolling_correlation(stock1, stock2, window)
-
+            
             # Create DataFrames for each stock
             df_stock1 = self.dataframe[[stock1]].copy()
             df_stock1['correlation'] = rolling_corr
@@ -276,6 +277,11 @@ class CorrelationAnalysis:
             df_stock2 = self.dataframe[[stock2]].copy()
             df_stock2['correlation'] = rolling_corr
 
+            # Optionally fill NaN values in the correlation column if fillna_method is provided
+            if fillna_method is not None:
+                df_stock1['correlation'] = df_stock1['correlation'].fillna(method=fillna_method)
+                df_stock2['correlation'] = df_stock2['correlation'].fillna(method=fillna_method)
+                
             return df_stock1, df_stock2
 
         # Step 4: Combine the DataFrames for both stocks
@@ -295,7 +301,12 @@ class CorrelationAnalysis:
             return combined_df
 
         # Step 5: Execute the process
-        df_stock1, df_stock2 = generate_feature_dfs(stock1 = self.dataframe[most_correlated_pair[0]], stock2 = self.dataframe[most_correlated_pair[1]], window='60min', fillna_method='ffill')
+        df_stock1, df_stock2 = generate_feature_dfs(
+            stock1=most_correlated_pair[0], 
+            stock2=most_correlated_pair[1], 
+            window='60min', 
+            fillna_method='ffill'
+        )    
         df_final = generate_combined_df(df_stock1, df_stock2)
 
         # Step 6: Save the DataFrames to pickle files
@@ -303,6 +314,7 @@ class CorrelationAnalysis:
         print("Pickle file saved for the final dataframe: final_dataframe.pkl")
         
         return df_final
+
 
     def get_correlation_lags(self, use_pct_change=False):
         """
