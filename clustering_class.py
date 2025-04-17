@@ -114,7 +114,7 @@ class TimeSeriesClustering:
             indices = np.triu_indices(n_samples, k=1)
 
             def _parallel_dtw(i, j):
-                return fastdtw(data[i], data[j], radius=5)[0]
+                return fastdtw(data[i], data[j], **dtw_args)[0]
 
             results = Parallel(n_jobs=-1)(
                 delayed(_parallel_dtw)(i, j)
