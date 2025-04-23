@@ -189,8 +189,13 @@ class IndexData_Retrieval:
             # Calculate today's date (end date)
             end_date = datetime.today()
 
-            # Calculate the start date by subtracting 'months' months from today's date
-            start_date = end_date - relativedelta(months=self.months)
+            # Calculate the start date using months if provided, otherwise use years
+            if self.months is not None:
+                start_date = end_date - relativedelta(months=self.months)
+            elif hasattr(self, 'years') and self.years is not None:
+                start_date = end_date - relativedelta(years=self.years)
+            else:
+                raise ValueError("Neither 'months' nor 'years' is provided. Please set one of them.")
 
             # Convert the start and end date to the correct format for Yahoo Finance (YYYY-MM-DD)
             start_date_str = start_date.strftime('%Y-%m-%d')
