@@ -56,7 +56,7 @@ pip install -r helpermodules/requirements.txt
 Import the modules in your Python scripts as needed. For example:
 
 ```python
-from helpermodules.DTWclustering import dtw_cluster
+from helpermodules.clustering_class import dtw_cluster
 from helpermodules.LSTM import train_lstm_model
 from helpermodules.df_dataretrieval import fetch_financial_data
 ```
